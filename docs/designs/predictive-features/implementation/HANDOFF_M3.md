@@ -33,3 +33,17 @@
 **Gotcha:** Testing CLI commands that lazy-import from `ktrdr.training.*` requires pre-registering a stub `ktrdr.training` module in `sys.modules` before importing the app. Otherwise the `patch()` target fails because Python can't resolve the module path through the torch-dependent `__init__.py`. See `test_context.py` header for the pattern.
 
 **Next task notes:** Task 3.4 is RESEARCH — run `ktrdr context analyze EURUSD 1d` on real cached data. Requires cached EURUSD 1d data. Command supports `--hourly-timeframe 1h` for return-by-context. Quality gate: distribution balanced, persistence >3 days, returns differentiate.
+
+## Task 3.4 Complete: Generate and Analyze Labels for EURUSD 1d
+
+**Result:** Default params (H=5, ±0.5%) FAIL quality gate. After parameter sweep, **H=10, T=±0.7%** passes all 3 gates.
+
+**Key findings:**
+- 5-day horizon too noisy for EURUSD — neutral persistence only 2.3 days, returns don't differentiate
+- 10-day horizon is the sweet spot: balanced distribution (28/33/39%), persistence >3d, directional hourly returns
+- Wider thresholds improve return diff but collapse distribution into >60% neutral
+- Only H=10 with moderate thresholds passes all gates simultaneously
+
+**Decision:** PROCEED with Thread 2. Recommended defaults for context model: horizon=10, threshold=±0.007.
+
+**Analysis saved:** `docs/designs/predictive-features/multi-timeframe-context/analysis/context_label_analysis_EURUSD.md`
