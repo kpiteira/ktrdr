@@ -111,10 +111,15 @@ async def start_backtest(
         # Use explicit model_path if provided (for v3 models), otherwise auto-discover
         model_path = request.model_path
 
-        # Extract full timeframes list from strategy config for multi-TF support
-        _, all_timeframes = extract_symbols_timeframes_from_strategy(
-            request.strategy_name
-        )
+        # Extract full timeframes list from strategy config for multi-TF support.
+        # If extraction fails (e.g., strategy file not found), fall back to the
+        # resolved timeframe — the worker can still proceed with single-TF.
+        try:
+            _, all_timeframes = extract_symbols_timeframes_from_strategy(
+                request.strategy_name
+            )
+        except (ValidationError, ConfigurationError):
+            all_timeframes = [resolved_timeframe]
 
         result = await service.run_backtest(
             symbol=resolved_symbol,
