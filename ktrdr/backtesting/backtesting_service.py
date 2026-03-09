@@ -182,6 +182,7 @@ class BacktestingService(ServiceOrchestrator[None]):
         initial_capital: float = 100000.0,
         commission: float = 0.001,
         slippage: float = 0.0005,
+        timeframes: Optional[list[str]] = None,
     ) -> dict[str, Any]:
         """
         Run backtest with async operations support.
@@ -231,6 +232,7 @@ class BacktestingService(ServiceOrchestrator[None]):
             initial_capital=initial_capital,
             commission=commission,
             slippage=slippage,
+            timeframes=timeframes or [],
         )
 
         # Return with the operation_id (backend_operation_id from worker)
@@ -294,6 +296,7 @@ class BacktestingService(ServiceOrchestrator[None]):
         initial_capital: float,
         commission: float = 0.001,
         slippage: float = 0.0005,
+        timeframes: Optional[list[str]] = None,
     ) -> dict[str, Any]:
         """
         Run backtest on worker using distributed execution pattern.
@@ -355,6 +358,7 @@ class BacktestingService(ServiceOrchestrator[None]):
             "commission": commission,
             "slippage": slippage,
             "model_path": model_path,  # Pass model_path to worker for v3 detection
+            "timeframes": timeframes or [],
         }
 
         remote_response = None

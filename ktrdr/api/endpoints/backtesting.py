@@ -111,6 +111,11 @@ async def start_backtest(
         # Use explicit model_path if provided (for v3 models), otherwise auto-discover
         model_path = request.model_path
 
+        # Extract full timeframes list from strategy config for multi-TF support
+        _, all_timeframes = extract_symbols_timeframes_from_strategy(
+            request.strategy_name
+        )
+
         result = await service.run_backtest(
             symbol=resolved_symbol,
             timeframe=resolved_timeframe,
@@ -121,6 +126,7 @@ async def start_backtest(
             initial_capital=request.initial_capital,
             commission=request.commission,
             slippage=request.slippage,
+            timeframes=all_timeframes,
         )
 
         return BacktestStartResponse(
