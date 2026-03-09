@@ -1227,6 +1227,60 @@ class DataSettings(BaseSettings):
     )
 
 
+class FredSettings(BaseSettings):
+    """FRED (Federal Reserve Economic Data) API Settings.
+
+    Provides configuration for the FRED external data provider used to fetch
+    yield curve data, interest rates, and other economic indicators.
+
+    Environment variables (all prefixed with KTRDR_FRED_):
+        KTRDR_FRED_API_KEY: FRED API key (free registration at
+            https://fred.stlouisfed.org/docs/api/api_key.html)
+        KTRDR_FRED_BASE_URL: FRED API base URL
+        KTRDR_FRED_RATE_LIMIT: Max requests per minute (default: 120)
+        KTRDR_FRED_CACHE_DIR: Local cache directory for fetched data
+
+    Deprecated names (still work):
+        FRED_API_KEY → KTRDR_FRED_API_KEY
+    """
+
+    api_key: str = deprecated_field(
+        "",
+        "KTRDR_FRED_API_KEY",
+        "FRED_API_KEY",
+        description="FRED API key (empty = not configured)",
+    )
+
+    base_url: str = Field(
+        default="https://api.stlouisfed.org/fred/series/observations",
+        description="FRED API base URL for series observations",
+    )
+
+    rate_limit: int = Field(
+        default=120,
+        gt=0,
+        description="Maximum requests per minute",
+    )
+
+    cache_dir: str = Field(
+        default="data/context/fred",
+        description="Local cache directory for fetched FRED data",
+    )
+
+    model_config = SettingsConfigDict(
+        env_prefix="KTRDR_FRED_",
+        env_file=".env.local",
+        extra="ignore",
+        populate_by_name=True,
+    )
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def has_api_key(self) -> bool:
+        """Whether a FRED API key is configured."""
+        return bool(self.api_key)
+
+
 class ApiServiceSettings(BaseSettings):
     """API Server configuration for client connections.
 
@@ -1388,6 +1442,12 @@ def get_data_settings() -> DataSettings:
 
 
 @lru_cache
+def get_fred_settings() -> FredSettings:
+    """Get FRED API settings with caching."""
+    return FredSettings()
+
+
+@lru_cache
 def get_api_service_settings() -> ApiServiceSettings:
     """Get API service settings for client connections with caching."""
     return ApiServiceSettings()
@@ -1434,6 +1494,7 @@ def clear_settings_cache() -> None:
     get_agent_trigger_settings.cache_clear()
     get_agent_gate_settings.cache_clear()
     get_data_settings.cache_clear()
+    get_fred_settings.cache_clear()
 
 
 # Export settings classes and getters
@@ -1456,6 +1517,7 @@ __all__ = [
     "AgentTriggerSettings",
     "AgentGateSettings",
     "DataSettings",
+    "FredSettings",
     # Cached getters
     "get_api_settings",
     "get_auth_settings",
@@ -1475,6 +1537,7 @@ __all__ = [
     "get_agent_trigger_settings",
     "get_agent_gate_settings",
     "get_data_settings",
+    "get_fred_settings",
     # Utilities
     "clear_settings_cache",
     "deprecated_field",
