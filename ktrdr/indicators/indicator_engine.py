@@ -42,6 +42,7 @@ class IndicatorEngine:
                 Example: {"rsi_14": {"type": "rsi", "period": 14}}
         """
         self._indicators: dict[str, BaseIndicator] = {}
+        self._data_sources: dict[str, str] = {}  # indicator_id -> data_source key
 
         if indicators:
             # Ensure all indicators are registered before we try to look them up
@@ -61,6 +62,15 @@ class IndicatorEngine:
                 # Handle both IndicatorDefinition and plain dict
                 if not isinstance(definition, IndicatorDefinition):
                     definition = IndicatorDefinition(**definition)
+
+                # Track data_source for context data routing
+                data_source = (
+                    definition.model_extra.get("data_source")
+                    if hasattr(definition, "model_extra") and definition.model_extra
+                    else None
+                )
+                if data_source:
+                    self._data_sources[indicator_id] = data_source
 
                 self._indicators[indicator_id] = self._create_indicator(
                     indicator_id, definition
@@ -156,13 +166,21 @@ class IndicatorEngine:
                 f"Failed to create indicator '{indicator_id}' of type '{definition.type}': {e}"
             ) from e
 
-    def compute(self, data: pd.DataFrame, indicator_ids: set[str]) -> pd.DataFrame:
+    def compute(
+        self,
+        data: pd.DataFrame,
+        indicator_ids: set[str],
+        context_data: Optional[dict[str, pd.DataFrame]] = None,
+    ) -> pd.DataFrame:
         """
         Compute specified indicators on data.
 
         Args:
             data: OHLCV DataFrame
             indicator_ids: Which indicators to compute
+            context_data: Optional dict mapping source keys to DataFrames.
+                Indicators with data_source will compute on the corresponding
+                context DataFrame instead of primary data.
 
         Returns:
             DataFrame with OHLCV + indicator columns:
@@ -178,7 +196,20 @@ class IndicatorEngine:
                 raise ValueError(f"Unknown indicator: {indicator_id}")
 
             indicator = self._indicators[indicator_id]
-            output = indicator.compute(data)
+
+            # Route to context data if data_source is set
+            source_key = self._data_sources.get(indicator_id)
+            if source_key:
+                if context_data is None or source_key not in context_data:
+                    raise KeyError(
+                        f"Indicator '{indicator_id}' requires data_source '{source_key}' "
+                        f"but it was not found in context_data"
+                    )
+                input_data = context_data[source_key]
+            else:
+                input_data = data
+
+            output = indicator.compute(input_data)
 
             if indicator.is_multi_output():
                 # Validate outputs match expected
@@ -375,7 +406,11 @@ class IndicatorEngine:
                 f"Indicator must return columns matching get_output_names()."
             )
 
-    def apply(self, data: pd.DataFrame) -> pd.DataFrame:
+    def apply(
+        self,
+        data: pd.DataFrame,
+        context_data: Optional[dict[str, pd.DataFrame]] = None,
+    ) -> pd.DataFrame:
         """
         Apply all configured indicators to the input data.
 
@@ -434,7 +469,7 @@ class IndicatorEngine:
 
         # Delegate to v3 compute() with all indicator_ids
         indicator_ids = set(self._indicators.keys())
-        result = self.compute(data, indicator_ids)
+        result = self.compute(data, indicator_ids, context_data=context_data)
 
         logger.debug(f"Successfully applied {len(indicator_ids)} indicators to data")
         return result
