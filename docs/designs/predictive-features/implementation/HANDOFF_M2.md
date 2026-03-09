@@ -20,7 +20,21 @@
 - `_compute_mean_returns` uses `.index.intersection()` to handle index length mismatches between labels and price_data (e.g., when NaN labels are dropped).
 - Transition matrix only includes regimes that actually transition — absent source regimes have no row.
 
-**Next Task Notes (2.3):**
-- CLI command `ktrdr regime analyze` needs `DataRepository.load_from_cache()` for OHLCV data loading.
-- Use Rich tables for output formatting. Follow existing CLI patterns in `ktrdr/cli/commands/`.
-- Register `regime_app = typer.Typer()` in `app.py`.
+## Task 2.3 Complete: Build CLI Command `ktrdr regime analyze`
+
+**Gotchas:**
+- `from ktrdr.training.regime_labeler import RegimeLabeler` triggers torch import via `ktrdr.training.__init__`. Used `importlib.util.spec_from_file_location` workaround to load the module directly — both in tests and in the CLI command itself.
+- Mock patch for DataRepository must target `ktrdr.data.repository.DataRepository` (where it's defined), not `ktrdr.cli.commands.regime.DataRepository` (lazy import inside function body doesn't create a module-level name).
+
+## Task 2.4 Complete: Generate and Analyze Labels for EURUSD 1h
+
+**Findings:**
+- Default params (H=24, thresh=0.5) fail: 91% ranging, only 4-bar trending persistence.
+- Tuned params (H=48, thresh=0.20): 63% ranging, 17-18% trending, 1.5% volatile, 1.9 trans/day.
+- Return differentiation strong: trending_up=+0.94%, trending_down=-0.89%.
+- Persistence (8-10 bars) below 24-bar target — structural SER issue, handled by router stability filter.
+- Decision: **PROCEED.** Regimes exist and differentiate returns. See analysis report at `docs/designs/predictive-features/regime-detection/analysis/EURUSD_1h_regime_analysis.md`.
+
+**Next Task Notes (2.5):**
+- VALIDATION task. Need cached EURUSD 1h data in `data/` directory. Already copied from ktrdr2.
+- Use tuned params: `--horizon 48 --trending-threshold 0.2`.
