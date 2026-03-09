@@ -7,7 +7,7 @@ import pytest
 pytest.importorskip("torch", reason="torch required for training module imports")
 
 from ktrdr.errors import DataError
-from ktrdr.training.context_labeler import ContextLabeler
+from ktrdr.training.context_labeler import ContextLabeler, ContextLabelStats
 
 # Label constants for readability
 BULLISH = 0
@@ -260,3 +260,165 @@ class TestContextLabelerEdgeCases:
         labeler = ContextLabeler()
         with pytest.raises(DataError):
             labeler.label(data)
+
+
+# --- Task 3.2: ContextLabelStats Analysis ---
+
+
+@pytest.fixture
+def known_context_labels() -> pd.Series:
+    """Context labels with known distribution: 5 BULLISH, 3 BEARISH, 7 NEUTRAL."""
+    dates = pd.date_range("2024-01-01", periods=15, freq="B")
+    values = [0, 0, 0, 0, 0, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2]
+    return pd.Series(values, index=dates, dtype=float)
+
+
+@pytest.fixture
+def alternating_labels() -> pd.Series:
+    """Labels that alternate every 2 days: duration should be ~2."""
+    dates = pd.date_range("2024-01-01", periods=12, freq="B")
+    # BULL, BULL, BEAR, BEAR, NEUT, NEUT, BULL, BULL, BEAR, BEAR, NEUT, NEUT
+    values = [0, 0, 1, 1, 2, 2, 0, 0, 1, 1, 2, 2]
+    return pd.Series(values, index=dates, dtype=float)
+
+
+class TestContextLabelStatsDistribution:
+    """Distribution computation tests."""
+
+    def test_distribution_sums_to_one(self, known_context_labels: pd.Series) -> None:
+        """Distribution fractions should sum to ~1.0."""
+        labeler = ContextLabeler()
+        stats = labeler.analyze_labels(known_context_labels)
+        total = sum(stats.distribution.values())
+        assert total == pytest.approx(1.0)
+
+    def test_distribution_values_correct(self, known_context_labels: pd.Series) -> None:
+        """Distribution should match known label counts."""
+        labeler = ContextLabeler()
+        stats = labeler.analyze_labels(known_context_labels)
+        assert stats.distribution[BULLISH] == pytest.approx(5 / 15)
+        assert stats.distribution[BEARISH] == pytest.approx(3 / 15)
+        assert stats.distribution[NEUTRAL] == pytest.approx(7 / 15)
+
+    def test_single_class_distribution(self) -> None:
+        """All-bullish labels: bullish=1.0, others=0.0."""
+        dates = pd.date_range("2024-01-01", periods=10, freq="B")
+        labels = pd.Series([0.0] * 10, index=dates)
+        labeler = ContextLabeler()
+        stats = labeler.analyze_labels(labels)
+        assert stats.distribution[BULLISH] == pytest.approx(1.0)
+        assert stats.distribution.get(BEARISH, 0.0) == pytest.approx(0.0)
+        assert stats.distribution.get(NEUTRAL, 0.0) == pytest.approx(0.0)
+
+
+class TestContextLabelStatsDuration:
+    """Persistence / duration computation tests."""
+
+    def test_duration_positive_for_present_classes(
+        self, known_context_labels: pd.Series
+    ) -> None:
+        """Duration should be > 0 for all classes present in labels."""
+        labeler = ContextLabeler()
+        stats = labeler.analyze_labels(known_context_labels)
+        for cls in [BULLISH, BEARISH, NEUTRAL]:
+            assert stats.mean_duration_days[cls] > 0
+
+    def test_known_alternating_durations(self, alternating_labels: pd.Series) -> None:
+        """Alternating 2-day runs should have mean duration = 2.0."""
+        labeler = ContextLabeler()
+        stats = labeler.analyze_labels(alternating_labels)
+        for cls in [BULLISH, BEARISH, NEUTRAL]:
+            assert stats.mean_duration_days[cls] == pytest.approx(2.0)
+
+    def test_single_long_run(self) -> None:
+        """One continuous run = mean duration equals run length."""
+        dates = pd.date_range("2024-01-01", periods=10, freq="B")
+        labels = pd.Series([0.0] * 10, index=dates)
+        labeler = ContextLabeler()
+        stats = labeler.analyze_labels(labels)
+        assert stats.mean_duration_days[BULLISH] == pytest.approx(10.0)
+
+
+class TestContextLabelStatsHourlyReturns:
+    """Hourly return by context tests."""
+
+    def test_hourly_returns_grouped_by_context(self) -> None:
+        """Mean hourly return should be computed per context class."""
+        # 4 days of daily labels (Mon-Thu)
+        daily_dates = pd.date_range("2024-01-01", periods=4, freq="B")
+        daily_labels = pd.Series(
+            [0.0, 0.0, 1.0, 1.0],
+            index=daily_dates,  # 2 bull, 2 bear
+        )
+
+        # Hourly data covering all 4 business days (96 hours)
+        hourly_dates = pd.date_range("2024-01-01", periods=96, freq="h")
+        hourly_closes = []
+        base = 100.0
+        for i in range(96):
+            day_idx = i // 24
+            if day_idx < 2:  # bullish days — price rises
+                base += 0.1
+            else:  # bearish days — price falls
+                base -= 0.1
+            hourly_closes.append(base)
+        hourly_data = pd.DataFrame({"close": hourly_closes}, index=hourly_dates)
+
+        labeler = ContextLabeler()
+        stats = labeler.analyze_labels(daily_labels, hourly_data=hourly_data)
+
+        assert stats.mean_hourly_return_by_context is not None
+        assert stats.mean_hourly_return_by_context[BULLISH] > 0
+        assert stats.mean_hourly_return_by_context[BEARISH] < 0
+
+    def test_no_hourly_data_returns_none(self, known_context_labels: pd.Series) -> None:
+        """Without hourly data, hourly return stats should be None."""
+        labeler = ContextLabeler()
+        stats = labeler.analyze_labels(known_context_labels)
+        assert stats.mean_hourly_return_by_context is None
+
+
+class TestContextLabelStatsRegimeCorrelation:
+    """Regime correlation tests."""
+
+    def test_identical_labels_high_correlation(self) -> None:
+        """Identical label series (mapped) should have high correlation."""
+        dates = pd.date_range("2024-01-01", periods=20, freq="B")
+        context = pd.Series([0, 0, 1, 1, 2, 2] * 3 + [0, 0], index=dates, dtype=float)
+        # Regime mirrors context pattern (different label space but same grouping)
+        regime = pd.Series([0, 0, 1, 1, 2, 2] * 3 + [0, 0], index=dates, dtype=float)
+
+        labeler = ContextLabeler()
+        stats = labeler.analyze_labels(context, regime_labels=regime)
+        assert stats.regime_correlation is not None
+        assert stats.regime_correlation > 0.5
+
+    def test_independent_labels_low_correlation(self) -> None:
+        """Independent label series should have low correlation."""
+        np.random.seed(42)
+        dates = pd.date_range("2024-01-01", periods=200, freq="B")
+        context = pd.Series(
+            np.random.choice([0, 1, 2], size=200), index=dates, dtype=float
+        )
+        regime = pd.Series(
+            np.random.choice([0, 1, 2, 3], size=200), index=dates, dtype=float
+        )
+
+        labeler = ContextLabeler()
+        stats = labeler.analyze_labels(context, regime_labels=regime)
+        assert stats.regime_correlation is not None
+        assert stats.regime_correlation < 0.3
+
+    def test_no_regime_labels_returns_none(
+        self, known_context_labels: pd.Series
+    ) -> None:
+        """Without regime labels, correlation should be None."""
+        labeler = ContextLabeler()
+        stats = labeler.analyze_labels(known_context_labels)
+        assert stats.regime_correlation is None
+
+    def test_stats_is_dataclass(self, known_context_labels: pd.Series) -> None:
+        """analyze_labels returns a ContextLabelStats instance."""
+        labeler = ContextLabeler()
+        stats = labeler.analyze_labels(known_context_labels)
+        assert isinstance(stats, ContextLabelStats)
