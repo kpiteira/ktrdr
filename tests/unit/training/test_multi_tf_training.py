@@ -22,13 +22,41 @@ class TestTrainingTimeframeResolution:
         # Multi-TF strategy config
         tf_config = MagicMock()
         tf_config.timeframes = ["1h", "4h", "1d"]
+        tf_config.base_timeframe = "1h"
 
         if tf_config.timeframes and len(tf_config.timeframes) > 1:
             training_timeframes = list(tf_config.timeframes)
+            base_tf = tf_config.base_timeframe
+            if (
+                base_tf
+                and base_tf in training_timeframes
+                and training_timeframes[0] != base_tf
+            ):
+                training_timeframes.remove(base_tf)
+                training_timeframes.insert(0, base_tf)
         else:
             training_timeframes = context_timeframes
 
         assert training_timeframes == ["1h", "4h", "1d"]
+
+    def test_base_timeframe_reordered_to_first(self) -> None:
+        """Base timeframe must be first — load_market_data uses timeframes[0] as base."""
+        tf_config = MagicMock()
+        tf_config.timeframes = ["1d", "4h", "1h"]  # base_timeframe is NOT first
+        tf_config.base_timeframe = "1h"
+
+        training_timeframes = list(tf_config.timeframes)
+        base_tf = tf_config.base_timeframe
+        if (
+            base_tf
+            and base_tf in training_timeframes
+            and training_timeframes[0] != base_tf
+        ):
+            training_timeframes.remove(base_tf)
+            training_timeframes.insert(0, base_tf)
+
+        assert training_timeframes[0] == "1h"
+        assert set(training_timeframes) == {"1h", "4h", "1d"}
 
     def test_single_tf_resolution_logic(self) -> None:
         """Single-TF strategy should fall back to context timeframes."""

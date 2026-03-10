@@ -191,6 +191,16 @@ class LocalTrainingOrchestrator:
         tf_config = v3_config.training_data.timeframes
         if tf_config.timeframes and len(tf_config.timeframes) > 1:
             training_timeframes = list(tf_config.timeframes)
+            # Ensure base_timeframe is first — TrainingPipeline.load_market_data()
+            # uses timeframes[0] as the alignment base
+            base_tf = tf_config.base_timeframe
+            if (
+                base_tf
+                and base_tf in training_timeframes
+                and training_timeframes[0] != base_tf
+            ):
+                training_timeframes.remove(base_tf)
+                training_timeframes.insert(0, base_tf)
             logger.info(
                 f"V3 training: using strategy config timeframes {training_timeframes} "
                 f"(API passed {self._context.timeframes})"

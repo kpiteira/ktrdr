@@ -520,7 +520,8 @@ class BacktestingEngine:
             # strategy config extraction — more reliable for multi-TF models
             timeframes = self.config.get_all_timeframes()
             if len(timeframes) <= 1:
-                # Fall back to strategy config if config only has base timeframe
+                # Fall back to strategy config if config has only a single timeframe
+                # or none at all (e.g., older callers that don't pass timeframes)
                 timeframes = self._get_strategy_timeframes()
 
             if len(timeframes) >= 2:

@@ -84,12 +84,20 @@ async def start_backtest(
         resolved_symbol = request.symbol
         resolved_timeframe = request.timeframe
 
+        # Extract strategy config once — used for both symbol/timeframe resolution
+        # and multi-TF timeframes list
+        config_symbols: list[str] = []
+        config_timeframes: list[str] = []
+        try:
+            config_symbols, config_timeframes = (
+                extract_symbols_timeframes_from_strategy(request.strategy_name)
+            )
+        except (ValidationError, ConfigurationError):
+            pass
+
         if resolved_symbol is None or resolved_timeframe is None:
             logger.info(
                 f"Extracting symbol/timeframe from strategy config: {request.strategy_name}"
-            )
-            config_symbols, config_timeframes = (
-                extract_symbols_timeframes_from_strategy(request.strategy_name)
             )
 
             if resolved_symbol is None:
@@ -111,15 +119,11 @@ async def start_backtest(
         # Use explicit model_path if provided (for v3 models), otherwise auto-discover
         model_path = request.model_path
 
-        # Extract full timeframes list from strategy config for multi-TF support.
-        # If extraction fails (e.g., strategy file not found), fall back to the
-        # resolved timeframe — the worker can still proceed with single-TF.
-        try:
-            _, all_timeframes = extract_symbols_timeframes_from_strategy(
-                request.strategy_name
-            )
-        except (ValidationError, ConfigurationError):
-            all_timeframes = [resolved_timeframe]
+        # Use full timeframes from strategy config for multi-TF support,
+        # fall back to resolved timeframe if extraction failed above
+        all_timeframes = (
+            config_timeframes if config_timeframes else [resolved_timeframe]
+        )
 
         result = await service.run_backtest(
             symbol=resolved_symbol,
