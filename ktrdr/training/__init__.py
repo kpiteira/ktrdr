@@ -2,8 +2,15 @@
 
 from .model_storage import ModelStorage
 
-# FeatureEngineer removed - using pure fuzzy processing
-from .model_trainer import EarlyStopping, ModelTrainer, TrainingMetrics
+# Guard torch-dependent imports so torch-free modules (context_labeler,
+# forward_return_labeler) remain importable without torch installed.
+try:
+    from .model_trainer import EarlyStopping, ModelTrainer, TrainingMetrics
+except ModuleNotFoundError as _e:
+    if _e.name == "torch":
+        pass  # torch not installed — torch-free modules still importable
+    else:
+        raise
 
 # StrategyTrainer removed - use LocalTrainingOrchestrator or HostTrainingOrchestrator
 from .zigzag_labeler import ZigZagConfig, ZigZagLabeler
@@ -27,9 +34,6 @@ from .zigzag_labeler import ZigZagConfig, ZigZagLabeler
 __all__ = [
     "ZigZagLabeler",
     "ZigZagConfig",
-    "ModelTrainer",
-    "TrainingMetrics",
-    "EarlyStopping",
     "ModelStorage",
     # "StrategyTrainer",  # Removed - use LocalTrainingOrchestrator or HostTrainingOrchestrator
     # "MultiTimeframeLabelGenerator",  # Temporarily disabled
