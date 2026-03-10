@@ -248,16 +248,17 @@ class RegimeLabeler:
         if len(labels) == 0:
             return {}
 
-        current_label = labels.iloc[0]
+        arr = labels.values
+        current_label = arr[0]
         current_run = 1
 
-        for i in range(1, len(labels)):
-            if labels.iloc[i] == current_label:
+        for i in range(1, len(arr)):
+            if arr[i] == current_label:
                 current_run += 1
             else:
                 name = REGIME_NAMES[int(current_label)]
                 durations.setdefault(name, []).append(current_run)
-                current_label = labels.iloc[i]
+                current_label = arr[i]
                 current_run = 1
 
         # Don't forget the last run
@@ -299,11 +300,12 @@ class RegimeLabeler:
         # Find transition points
         transitions: dict[str, dict[str, int]] = {}
         total = 0
+        arr = labels.values
 
-        for i in range(1, len(labels)):
-            if labels.iloc[i] != labels.iloc[i - 1]:
-                from_name = REGIME_NAMES[int(labels.iloc[i - 1])]
-                to_name = REGIME_NAMES[int(labels.iloc[i])]
+        for i in range(1, len(arr)):
+            if arr[i] != arr[i - 1]:
+                from_name = REGIME_NAMES[int(arr[i - 1])]
+                to_name = REGIME_NAMES[int(arr[i])]
                 transitions.setdefault(from_name, {})
                 transitions[from_name][to_name] = (
                     transitions[from_name].get(to_name, 0) + 1

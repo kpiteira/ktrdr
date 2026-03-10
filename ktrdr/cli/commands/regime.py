@@ -63,9 +63,10 @@ def analyze(
             "ktrdr.training.regime_labeler",
             str(_Path(__file__).parents[2] / "training" / "regime_labeler.py"),
         )
+        assert _spec is not None and _spec.loader is not None
         _mod = _ilu.module_from_spec(_spec)
         _sys.modules["ktrdr.training.regime_labeler"] = _mod
-        _spec.loader.exec_module(_mod)  # type: ignore[union-attr]
+        _spec.loader.exec_module(_mod)
     from ktrdr.training.regime_labeler import RegimeLabeler
 
     console = Console()
