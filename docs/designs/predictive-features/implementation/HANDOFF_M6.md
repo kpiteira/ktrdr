@@ -105,21 +105,20 @@
 - Needs real FRED API key for live test
 - Strategy must declare `context_data` with FRED provider and indicators with `data_source`
 
-## Task 6.7 Partial: Validation
+## Task 6.7 Complete: Validation
 
-**What was done:**
-- E2E test designed and added to catalog: `.claude/skills/ke2e/tests/training/fred-context-data.md`
-- 8-step test covering: strategy creation, training start, completion poll, metadata verification, feature count, FRED cache check
-- Full unit test suite passes: 5328 passed, 41 skipped
+**Full sandbox E2E (4 test cases, all PASSED):**
+1. Train without context_data (regression): model saved, no errors
+2. Train with FRED context_data: DGS2 (44 rows) + IRLTLT01DEM156N (3 rows) aligned to 941 hourly rows
+3. Model metadata: context_data_config and context_source_ids correctly persisted
+4. No API key leakage in logs
 
-**E2E validation (5 steps, all PASSED):**
-1. FRED API key loaded from 1Password
-2. Real FRED fetch: DGS2 (370 rows) + IRLTLT01DEM156N (18 rows) → spread (13 rows)
-3. Alignment: 13 daily → 11,665 hourly rows via forward-fill
-4. Indicator routing: price RSI=49.7 vs yield RSI=65.9 (confirms different data sources)
-5. ModelMetadata roundtrip: 3 source IDs preserved through to_dict/from_dict
+**Bugs found and fixed during E2E:**
+- `value` column renamed to `close` for indicator compatibility
+- ContextDataAligner failed on tz-naive FRED daily → tz-aware OHLCV hourly (0 rows aligned) — fixed with tz normalization
+- FredDataProvider not registered in ContextDataProviderRegistry — added `_register_builtins()` to registry init
+- httpx logged FRED API key in URL — suppressed httpx logging during FRED requests
+- KTRDR_FRED_API_KEY not injected into containers — added to docker-compose.sandbox.yml and kinfra secrets mapping
+- Sandbox port conflicts — added KTRDR_DESIGN_AGENT_PORT and KTRDR_ASSESSMENT_AGENT_PORT to .env.sandbox
 
-**Bug found during E2E:**
-- FRED provider returned `value` column but indicators expect `close`
-- Fixed: `_parse_observations()` now renames `value` → `close` at source
-- Stale cache with old column names caused KeyError — cleared cache resolved it
+**Unit tests:** 5329 passed, 41 skipped
