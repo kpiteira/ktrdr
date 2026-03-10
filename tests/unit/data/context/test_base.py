@@ -234,3 +234,35 @@ class TestContextDataAligner:
 
         assert len(result) == 3
         assert list(result["value"]) == [1.0, 2.0, 3.0]
+
+    def test_tz_aware_primary_with_tz_naive_context(self):
+        """UTC-aware primary index should align with tz-naive daily context data.
+
+        This is the real production scenario: FRED returns tz-naive daily dates,
+        but OHLCV data has UTC-aware hourly timestamps.
+        """
+        # FRED-like daily data (tz-naive)
+        daily_data = pd.DataFrame(
+            {"close": [4.38, 4.35, 4.40]},
+            index=pd.DatetimeIndex(
+                [
+                    pd.Timestamp("2024-01-02"),
+                    pd.Timestamp("2024-01-03"),
+                    pd.Timestamp("2024-01-04"),
+                ]
+            ),
+        )
+        # OHLCV-like hourly index (UTC-aware)
+        hourly_index = pd.date_range(start="2024-01-02", periods=72, freq="h", tz="UTC")
+
+        aligner = ContextDataAligner()
+        result = aligner.align(daily_data, hourly_index)
+
+        # Should have data for all 72 hourly bars
+        assert len(result) == 72
+        # First hour should carry Jan 2 value
+        assert result["close"].iloc[0] == 4.38
+        # No NaN values
+        assert not result["close"].isna().any()
+        # Result should have UTC timezone
+        assert result.index.tz is not None

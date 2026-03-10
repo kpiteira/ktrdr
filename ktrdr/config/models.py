@@ -777,7 +777,8 @@ class StrategyConfigurationV3(BaseModel):
         ..., description="Training data configuration"
     )
     context_data: Optional[list[ContextDataEntry]] = Field(
-        None, description="External data source declarations (FRED, IB cross-pair, etc.)"
+        None,
+        description="External data source declarations (FRED, IB cross-pair, etc.)",
     )
     deployment: Optional[DeploymentConfiguration] = Field(
         None, description="Deployment configuration (optional)"

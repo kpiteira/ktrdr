@@ -149,14 +149,21 @@ class FredDataProvider(ContextDataProvider):
             "api_key": self._settings.api_key,
         }
 
-        async with httpx.AsyncClient() as client:
-            response = await client.get(
-                self._settings.base_url,
-                params=params,
-                timeout=30.0,
-            )
-            response.raise_for_status()
-            return response.json()
+        # Suppress httpx request logging — URL contains API key
+        httpx_logger = logging.getLogger("httpx")
+        prev_level = httpx_logger.level
+        httpx_logger.setLevel(logging.WARNING)
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(
+                    self._settings.base_url,
+                    params=params,
+                    timeout=30.0,
+                )
+                response.raise_for_status()
+                return response.json()
+        finally:
+            httpx_logger.setLevel(prev_level)
 
     def _parse_observations(self, response: dict) -> pd.DataFrame:
         """Parse FRED API response into a DataFrame.

@@ -14,10 +14,19 @@ class ContextDataProviderRegistry:
     Providers register by name (e.g., "fred", "ib", "cftc_cot") and are
     instantiated on retrieval. This allows strategies to reference providers
     by name in YAML without importing specific classes.
+
+    Built-in providers are registered automatically on construction.
     """
 
     def __init__(self) -> None:
         self._providers: dict[str, type[ContextDataProvider]] = {}
+        self._register_builtins()
+
+    def _register_builtins(self) -> None:
+        """Register built-in providers."""
+        from .fred_provider import FredDataProvider
+
+        self._providers["fred"] = FredDataProvider
 
     def register(self, name: str, provider_class: type[ContextDataProvider]) -> None:
         """Register a provider class by name.

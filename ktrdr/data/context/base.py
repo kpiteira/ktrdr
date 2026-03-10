@@ -132,14 +132,32 @@ class ContextDataAligner:
         if context_data.empty:
             return context_data
 
-        # Reindex to primary timeframe — introduces NaN where no context data exists
-        aligned = context_data.reindex(primary_index, method=None)
+        # Normalize context index to tz-naive for merging with primary index.
+        # FRED returns date-only index; primary is hourly with timezone.
+        ctx = context_data.copy()
+        if ctx.index.tz is not None:
+            ctx.index = ctx.index.tz_localize(None)
+
+        primary = primary_index
+        if hasattr(primary, "tz") and primary.tz is not None:
+            primary = primary.tz_localize(None)
+
+        # Combine context and primary indices, reindex, then forward-fill
+        combined_index = ctx.index.union(primary).sort_values()
+        aligned = ctx.reindex(combined_index)
 
         # Forward-fill: carry last known value forward through gaps
         if method == "forward_fill":
             aligned = aligned.ffill()
 
+        # Keep only the primary index timestamps
+        aligned = aligned.reindex(primary)
+
         # Drop leading NaN rows (before first context observation)
         aligned = aligned.dropna(how="any")
+
+        # Restore original timezone if primary had one
+        if hasattr(primary_index, "tz") and primary_index.tz is not None:
+            aligned.index = aligned.index.tz_localize(primary_index.tz)
 
         return aligned

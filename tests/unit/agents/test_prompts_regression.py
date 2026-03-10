@@ -58,13 +58,20 @@ class TestAssessmentPromptRegression:
         ctx = self._make_regression_context()
         prompt = get_assessment_prompt(ctx)
         assert "regression" in prompt.lower()
-        assert "directional accuracy" in prompt.lower() or "directional_accuracy" in prompt.lower()
+        assert (
+            "directional accuracy" in prompt.lower()
+            or "directional_accuracy" in prompt.lower()
+        )
 
     def test_regression_prompt_includes_r_squared(self):
         """R-squared metric included in regression assessment."""
         ctx = self._make_regression_context()
         prompt = get_assessment_prompt(ctx)
-        assert "r_squared" in prompt.lower() or "r-squared" in prompt.lower() or "r²" in prompt.lower()
+        assert (
+            "r_squared" in prompt.lower()
+            or "r-squared" in prompt.lower()
+            or "r²" in prompt.lower()
+        )
 
     def test_regression_prompt_includes_cost_model(self):
         """cost_model config included in regression assessment context."""

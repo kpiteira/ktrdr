@@ -120,6 +120,7 @@ services:
       - KTRDR_AGENT_TRIGGER_INTERVAL=${KTRDR_AGENT_TRIGGER_INTERVAL:-300}
       # From 1Password - empty default disables agents
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - KTRDR_FRED_API_KEY=${KTRDR_FRED_API_KEY:-}
       - KTRDR_AGENT_TRAINING_START_DATE=${KTRDR_AGENT_TRAINING_START_DATE:-2015-01-01}
       - KTRDR_AGENT_TRAINING_END_DATE=${KTRDR_AGENT_TRAINING_END_DATE:-2019-12-31}
       - KTRDR_AGENT_BACKTEST_START_DATE=${KTRDR_AGENT_BACKTEST_START_DATE:-2020-01-01}
@@ -357,6 +358,7 @@ services:
       - KTRDR_DB_NAME=${KTRDR_DB_NAME:-ktrdr}
       - KTRDR_DB_USER=${KTRDR_DB_USER:-ktrdr}
       - KTRDR_DB_PASSWORD=${KTRDR_DB_PASSWORD:-localdev}
+      - KTRDR_FRED_API_KEY=${KTRDR_FRED_API_KEY:-}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     healthcheck:
@@ -410,6 +412,7 @@ services:
       - KTRDR_DB_NAME=${KTRDR_DB_NAME:-ktrdr}
       - KTRDR_DB_USER=${KTRDR_DB_USER:-ktrdr}
       - KTRDR_DB_PASSWORD=${KTRDR_DB_PASSWORD:-localdev}
+      - KTRDR_FRED_API_KEY=${KTRDR_FRED_API_KEY:-}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     healthcheck:

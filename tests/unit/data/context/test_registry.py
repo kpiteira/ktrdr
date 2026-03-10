@@ -77,10 +77,10 @@ class TestRegistryRegistration:
         available = registry.available_providers()
         assert sorted(available) == ["fred", "ib"]
 
-    def test_empty_registry(self):
-        """Empty registry should return empty available list."""
+    def test_builtin_providers_registered(self):
+        """Registry should have built-in providers registered."""
         registry = ContextDataProviderRegistry()
-        assert registry.available_providers() == []
+        assert "fred" in registry.available_providers()
 
     def test_get_returns_new_instance_each_call(self):
         """Each get() call should return a new provider instance."""

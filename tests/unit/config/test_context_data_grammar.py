@@ -84,9 +84,7 @@ class TestContextDataEntry:
 
     def test_series_list(self):
         """Series can be a list of strings."""
-        entry = ContextDataEntry(
-            provider="fred", series=["DGS2", "IRLTLT01DEM156N"]
-        )
+        entry = ContextDataEntry(provider="fred", series=["DGS2", "IRLTLT01DEM156N"])
         assert entry.series == ["DGS2", "IRLTLT01DEM156N"]
 
 
@@ -129,7 +127,10 @@ class TestStrategyWithContextData:
         config = StrategyConfigurationV3(**data)
         # data_source should be in model_extra
         yield_rsi = config.indicators["yield_rsi"]
-        assert yield_rsi.model_extra.get("data_source") == "yield_spread_DGS2_IRLTLT01DEM156N"
+        assert (
+            yield_rsi.model_extra.get("data_source")
+            == "yield_spread_DGS2_IRLTLT01DEM156N"
+        )
 
     def test_data_source_and_source_coexist(self):
         """data_source and source (RSI column param) should not collide."""
