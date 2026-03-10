@@ -135,8 +135,9 @@ class ContextDataAligner:
         # Normalize context index to tz-naive for merging with primary index.
         # FRED returns date-only index; primary is hourly with timezone.
         ctx = context_data.copy()
-        if ctx.index.tz is not None:
-            ctx.index = ctx.index.tz_localize(None)
+        ctx_dti = pd.DatetimeIndex(ctx.index)
+        if ctx_dti.tz is not None:
+            ctx.index = ctx_dti.tz_localize(None)
 
         primary = primary_index
         if hasattr(primary, "tz") and primary.tz is not None:
@@ -158,6 +159,6 @@ class ContextDataAligner:
 
         # Restore original timezone if primary had one
         if hasattr(primary_index, "tz") and primary_index.tz is not None:
-            aligned.index = aligned.index.tz_localize(primary_index.tz)
+            aligned.index = pd.DatetimeIndex(aligned.index).tz_localize(primary_index.tz)
 
         return aligned
