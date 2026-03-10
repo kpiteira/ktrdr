@@ -22,6 +22,7 @@ from ktrdr.cli.commands.follow import follow
 from ktrdr.cli.commands.list_cmd import list_app
 from ktrdr.cli.commands.migrate import migrate_cmd
 from ktrdr.cli.commands.ops import ops
+from ktrdr.cli.commands.regime import regime_app
 from ktrdr.cli.commands.research import research
 from ktrdr.cli.commands.resume import resume
 from ktrdr.cli.commands.show import show_app
@@ -120,6 +121,9 @@ app.add_typer(agent_app)  # ktrdr agent status
 
 # Register evolution subcommand group
 app.add_typer(evolve_app)  # ktrdr evolve start
+
+# Register regime subcommand group
+app.add_typer(regime_app)  # ktrdr regime analyze
 
 
 def _register_subgroups() -> None:
