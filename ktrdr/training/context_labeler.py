@@ -64,6 +64,11 @@ class ContextLabeler:
             bullish_threshold: Minimum forward return to classify as BULLISH.
             bearish_threshold: Maximum forward return to classify as BEARISH (negative).
         """
+        if horizon <= 0:
+            raise DataError(
+                "horizon must be positive",
+                details={"horizon": horizon},
+            )
         self.horizon = horizon
         self.bullish_threshold = bullish_threshold
         self.bearish_threshold = bearish_threshold

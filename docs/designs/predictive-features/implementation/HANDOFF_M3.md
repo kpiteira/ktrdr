@@ -10,7 +10,7 @@
 - Module imports only pandas + ktrdr.errors — no torch dependency
 - Tests use `pytest.importorskip("torch")` because importing via `ktrdr.training.context_labeler` triggers `__init__.py` which imports torch
 
-**Gotcha:** `ktrdr.training.__init__.py` imports torch transitively. Any test importing from `ktrdr.training.*` needs the torch guard even if the module itself is pure pandas.
+**Resolved:** `ktrdr.training.__init__.py` now guards torch imports with `try/except ModuleNotFoundError`. Tests no longer need `importorskip("torch")` or `sys.modules` stubs for torch-free modules like `context_labeler`.
 
 **Next task notes:** Task 3.2 adds `analyze_labels()` method and `ContextLabelStats` dataclass to the same file. Consider the hourly return aggregation — needs hourly data aligned to daily context labels via forward-fill.
 

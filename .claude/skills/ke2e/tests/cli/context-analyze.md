@@ -60,7 +60,7 @@ grep -c "^202[0-4]" data/EURUSD_1d.csv | xargs -I{} test {} -gt 100 || {
 
 **Command:**
 ```bash
-cd /Users/karl/Documents/dev/ktrdr-impl-predictive-features-M3
+cd $(git rev-parse --show-toplevel)
 
 OUTPUT=$(uv run ktrdr context analyze EURUSD 1d \
   --start-date 2020-01-01 \

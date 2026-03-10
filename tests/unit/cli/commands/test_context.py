@@ -1,37 +1,11 @@
 """Tests for `ktrdr context analyze` CLI command."""
 
-import sys
-import types
 from unittest.mock import MagicMock, patch
 
 import pandas as pd
 import pytest
 
-# Pre-register ktrdr.training as a package stub if torch isn't available.
-# This allows importing ktrdr.training.context_labeler without triggering
-# ktrdr.training.__init__.py which imports torch via model_trainer.
-_torch_available = True
-try:
-    import torch  # noqa: F401
-except ImportError:
-    _torch_available = False
-    if "ktrdr.training" not in sys.modules:
-        _stub = types.ModuleType("ktrdr.training")
-        _stub.__path__ = [str(types)]  # type: ignore[attr-defined]
-        sys.modules["ktrdr.training"] = _stub
-    # Now import the actual context_labeler submodule (it only needs pandas)
-    import importlib.util
-
-    _spec = importlib.util.spec_from_file_location(
-        "ktrdr.training.context_labeler",
-        "ktrdr/training/context_labeler.py",
-    )
-    if _spec and _spec.loader:
-        _mod = importlib.util.module_from_spec(_spec)
-        sys.modules["ktrdr.training.context_labeler"] = _mod
-        _spec.loader.exec_module(_mod)
-
-from ktrdr.cli.app import app  # noqa: E402
+from ktrdr.cli.app import app
 
 # Label constants
 BULLISH = 0

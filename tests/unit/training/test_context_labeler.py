@@ -4,8 +4,6 @@ import numpy as np
 import pandas as pd
 import pytest
 
-pytest.importorskip("torch", reason="torch required for training module imports")
-
 from ktrdr.errors import DataError
 from ktrdr.training.context_labeler import ContextLabeler, ContextLabelStats
 
@@ -79,9 +77,9 @@ class TestContextLabelerBasic:
 
         # All non-NaN labels should be BULLISH (5-day return of ~5% >> 0.5%)
         valid = labels.dropna()
-        assert (valid == BULLISH).all(), (
-            f"Expected all BULLISH, got: {valid.value_counts().to_dict()}"
-        )
+        assert (
+            valid == BULLISH
+        ).all(), f"Expected all BULLISH, got: {valid.value_counts().to_dict()}"
 
     def test_downtrend_produces_bearish_labels(
         self, daily_downtrend_data: pd.DataFrame
@@ -93,9 +91,9 @@ class TestContextLabelerBasic:
         labels = labeler.label(daily_downtrend_data)
 
         valid = labels.dropna()
-        assert (valid == BEARISH).all(), (
-            f"Expected all BEARISH, got: {valid.value_counts().to_dict()}"
-        )
+        assert (
+            valid == BEARISH
+        ).all(), f"Expected all BEARISH, got: {valid.value_counts().to_dict()}"
 
     def test_flat_data_produces_neutral_labels(
         self, daily_flat_data: pd.DataFrame
@@ -107,9 +105,9 @@ class TestContextLabelerBasic:
         labels = labeler.label(daily_flat_data)
 
         valid = labels.dropna()
-        assert (valid == NEUTRAL).all(), (
-            f"Expected all NEUTRAL, got: {valid.value_counts().to_dict()}"
-        )
+        assert (
+            valid == NEUTRAL
+        ).all(), f"Expected all NEUTRAL, got: {valid.value_counts().to_dict()}"
 
     def test_last_horizon_bars_are_nan(self, daily_uptrend_data: pd.DataFrame) -> None:
         """Last `horizon` bars should be NaN (no future data available)."""
@@ -209,9 +207,9 @@ class TestContextLabelerThresholds:
         bullish_pct = (labels == BULLISH).sum() / len(labels)
         bearish_pct = (labels == BEARISH).sum() / len(labels)
         # Should be roughly equal (within 15 percentage points)
-        assert abs(bullish_pct - bearish_pct) < 0.15, (
-            f"bullish={bullish_pct:.2%}, bearish={bearish_pct:.2%}"
-        )
+        assert (
+            abs(bullish_pct - bearish_pct) < 0.15
+        ), f"bullish={bullish_pct:.2%}, bearish={bearish_pct:.2%}"
 
 
 class TestContextLabelerEdgeCases:
@@ -253,6 +251,16 @@ class TestContextLabelerEdgeCases:
         labeler = ContextLabeler()
         with pytest.raises(DataError, match="zero"):
             labeler.label(data)
+
+    def test_zero_horizon_raises_error(self) -> None:
+        """Zero horizon should raise DataError."""
+        with pytest.raises(DataError, match="positive"):
+            ContextLabeler(horizon=0)
+
+    def test_negative_horizon_raises_error(self) -> None:
+        """Negative horizon should raise DataError."""
+        with pytest.raises(DataError, match="positive"):
+            ContextLabeler(horizon=-5)
 
     def test_empty_dataframe_raises_error(self) -> None:
         """Empty DataFrame should raise DataError."""

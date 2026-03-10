@@ -201,11 +201,12 @@ def analyze(
         )
 
     # Check persistence
-    min_dur = min(
+    dur_values = [
         stats.mean_duration_days.get(cls, 0.0)
         for cls in [0, 1, 2]
         if stats.distribution.get(cls, 0) > 0
-    )
+    ]
+    min_dur = min(dur_values) if dur_values else 0.0
     if min_dur < 3.0:
         console.print(
             f"  Persistence: [red]FAIL[/red] (min duration = {min_dur:.1f} days < 3)"
