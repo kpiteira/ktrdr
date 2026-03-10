@@ -154,8 +154,15 @@ class ContextDataAligner:
         # Keep only the primary index timestamps
         aligned = aligned.reindex(primary)
 
-        # Drop leading NaN rows (before first context observation)
-        aligned = aligned.dropna(how="any")
+        # Drop only leading NaN rows (before first context observation).
+        # Interior NaNs are preserved — dropna(how='any') would incorrectly
+        # remove non-leading gaps in multi-column context data.
+        first_valid = aligned.first_valid_index()
+        if first_valid is not None:
+            aligned = aligned.loc[first_valid:]
+        else:
+            # All NaN — return empty
+            aligned = aligned.iloc[0:0]
 
         # Restore original timezone if primary had one
         if hasattr(primary_index, "tz") and primary_index.tz is not None:

@@ -21,6 +21,22 @@ from .base import ContextDataProvider, ContextDataResult
 logger = logging.getLogger(__name__)
 
 
+class _RedactApiKeyFilter(logging.Filter):
+    """Filter that redacts api_key query parameter from httpx log messages."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if hasattr(record, "msg") and isinstance(record.msg, str):
+            import re
+
+            record.msg = re.sub(r"api_key=[^&\s\"']+", "api_key=***", record.msg)
+        return True
+
+
+# Install filter once at module load — concurrency-safe unlike level mutation
+_httpx_filter = _RedactApiKeyFilter()
+logging.getLogger("httpx").addFilter(_httpx_filter)
+
+
 class FredDataProvider(ContextDataProvider):
     """Fetches economic data from FRED API with local caching.
 
@@ -61,8 +77,23 @@ class FredDataProvider(ContextDataProvider):
             errors.append("FRED provider requires 'series' field")
             return errors
 
-        if isinstance(series, list) and len(series) == 0:
-            errors.append("FRED provider 'series' list must not be empty")
+        if isinstance(series, str):
+            if series.strip() == "":
+                errors.append("FRED provider 'series' string must be non-empty")
+                return errors
+        elif isinstance(series, list):
+            if len(series) == 0:
+                errors.append("FRED provider 'series' list must not be empty")
+                return errors
+            if not all(isinstance(s, str) and s.strip() != "" for s in series):
+                errors.append(
+                    "FRED provider 'series' list must contain only non-empty strings"
+                )
+                return errors
+        else:
+            errors.append(
+                "FRED provider 'series' must be a string or list of strings"
+            )
             return errors
 
         if not self._settings.has_api_key:
@@ -149,21 +180,14 @@ class FredDataProvider(ContextDataProvider):
             "api_key": self._settings.api_key,
         }
 
-        # Suppress httpx request logging — URL contains API key
-        httpx_logger = logging.getLogger("httpx")
-        prev_level = httpx_logger.level
-        httpx_logger.setLevel(logging.WARNING)
-        try:
-            async with httpx.AsyncClient() as client:
-                response = await client.get(
-                    self._settings.base_url,
-                    params=params,
-                    timeout=30.0,
-                )
-                response.raise_for_status()
-                return response.json()
-        finally:
-            httpx_logger.setLevel(prev_level)
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                self._settings.base_url,
+                params=params,
+                timeout=30.0,
+            )
+            response.raise_for_status()
+            return response.json()
 
     def _parse_observations(self, response: dict) -> pd.DataFrame:
         """Parse FRED API response into a DataFrame.
@@ -251,10 +275,12 @@ class FredDataProvider(ContextDataProvider):
         if series_meta is None:
             return None
 
-        # Check if cached range covers requested range
-        cached_start = datetime.fromisoformat(series_meta["start_date"])
-        cached_end = datetime.fromisoformat(series_meta["end_date"])
-        if cached_start <= start_date and cached_end >= end_date:
+        # Compare as date strings to avoid tz-aware vs tz-naive mismatch
+        cached_start = series_meta["start_date"][:10]  # YYYY-MM-DD
+        cached_end = series_meta["end_date"][:10]
+        req_start = start_date.strftime("%Y-%m-%d")
+        req_end = end_date.strftime("%Y-%m-%d")
+        if cached_start <= req_start and cached_end >= req_end:
             logger.debug("Cache hit for FRED series %s", series_id)
             df = pd.read_csv(cache_file, index_col=0, parse_dates=True)
             return df
@@ -274,8 +300,8 @@ class FredDataProvider(ContextDataProvider):
 
         metadata = self._load_metadata()
         metadata[series_id] = {
-            "start_date": start_date.isoformat(),
-            "end_date": end_date.isoformat(),
+            "start_date": start_date.strftime("%Y-%m-%d"),
+            "end_date": end_date.strftime("%Y-%m-%d"),
             "rows": len(df),
         }
         self._save_metadata(metadata)
