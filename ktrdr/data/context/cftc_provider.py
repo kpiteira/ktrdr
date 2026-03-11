@@ -385,6 +385,7 @@ class CftcCotProvider(ContextDataProvider):
             index=pd.DatetimeIndex(pd.to_datetime(filtered[COL_DATE].values)),
         )
         result = result.sort_index()
+        result = result[~result.index.duplicated(keep="last")]
         result = result.dropna()
 
         logger.debug(
@@ -465,6 +466,7 @@ class CftcCotProvider(ContextDataProvider):
             index=pd.DatetimeIndex(pd.to_datetime(filtered[date_col].values)),
         )
         result = result.sort_index()
+        result = result[~result.index.duplicated(keep="last")]
         result = result.dropna()
 
         return result
