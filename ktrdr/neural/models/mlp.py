@@ -49,12 +49,13 @@ class MLPTradingModel(BaseNeuralModel):
             )
             prev_size = hidden_size
 
-        # Output layer: 1 neuron for regression, 3 for classification
+        # Output layer: 1 neuron for regression, configurable for classification
         output_format = self.config.get("output_format", "classification")
         if output_format == "regression":
             layers.append(nn.Linear(prev_size, 1))
         elif output_format == "classification":
-            layers.append(nn.Linear(prev_size, 3))
+            num_classes = self.config.get("num_classes", 3)
+            layers.append(nn.Linear(prev_size, num_classes))
         else:
             raise ValueError(
                 f"Unsupported output_format '{output_format}'. Must be 'classification' or 'regression'."

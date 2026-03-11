@@ -284,7 +284,7 @@ class LocalTrainingOrchestrator:
         # so truncate features from the front to match
         if label_source in ("forward_return", "regime") and len(labels) < len(features):
             truncated_from = len(features)
-            features = features[: len(labels)]  # type: ignore[assignment]
+            features = features[: len(labels)]
             logger.info(
                 f"Truncated features from {truncated_from} to {len(features)} "
                 f"to match {label_source} labels (horizon={labels_config.get('horizon', 20)})"
@@ -327,7 +327,15 @@ class LocalTrainingOrchestrator:
         # Create model
         decisions_config = config.get("decisions", {})
         output_format = decisions_config.get("output_format", "classification")
-        output_dim = 1 if output_format == "regression" else 3
+        label_source = (
+            config.get("training", {}).get("labels", {}).get("source", "zigzag")
+        )
+        if output_format == "regression":
+            output_dim = 1
+        elif label_source == "regime":
+            output_dim = 4  # 4-class regime classification
+        else:
+            output_dim = 3  # standard 3-class (BUY/SELL/HOLD)
 
         model_config = config.get("model", {})
         # Inject output_format so MLPTradingModel builds the right architecture

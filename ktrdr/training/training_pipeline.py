@@ -595,7 +595,9 @@ class TrainingPipeline:
 
         if model_type == "mlp":
             # Create MLPTradingModel and build the model
-            mlp_model = MLPTradingModel(model_config)
+            # Inject num_classes so MLP knows the output dimension
+            model_config_with_classes = {**model_config, "num_classes": output_dim}
+            mlp_model = MLPTradingModel(model_config_with_classes)
             model = mlp_model.build_model(input_dim)
             logger.info(
                 f"✅ Created MLP model with hidden_layers={model_config.get('hidden_layers', [])}"

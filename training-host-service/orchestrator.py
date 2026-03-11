@@ -862,7 +862,12 @@ class HostTrainingOrchestrator:
                     f"Unsupported output_format '{output_format}'. "
                     "Must be 'classification' or 'regression'."
                 )
-            output_dim = 1 if output_format == "regression" else 3
+            if output_format == "regression":
+                output_dim = 1
+            elif label_source == "regime":
+                output_dim = 4  # 4-class regime classification
+            else:
+                output_dim = 3  # standard 3-class (BUY/SELL/HOLD)
 
             model_config = strategy_config.get("model", {})
             # Inject output_format so MLPTradingModel builds the right architecture

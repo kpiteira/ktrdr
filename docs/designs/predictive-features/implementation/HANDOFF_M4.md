@@ -24,3 +24,35 @@
 - Strategy YAML goes in `strategies/` directory. Check architecture doc Section 3.3 for the complete YAML.
 - Indicators used: `atr`, `bollinger_band_width`, `adx`, `squeeze_intensity` — verify all exist.
 - ADX outputs use lowercase: `adx_14.adx`, `adx_14.plus_di`.
+
+## Task 4.3 Complete: Create Seed Regime Strategy YAML
+
+**Gotchas:**
+- Indicator registry doesn't normalize underscores in type names. Architecture doc uses `bollinger_band_width` and `squeeze_intensity` but canonical names are `bollingerbandwidth` and `squeezeintensity`. Strategy YAML must use canonical names.
+- `ktrdr validate` command goes through backend API — strategy file must be in container. Used Python loader for local validation instead.
+- `config.training` is a plain dict, not a typed object — access with `.get("labels", {})`.
+
+**Next task notes (4.4):**
+- Training command: `uv run ktrdr train regime_classifier_seed_v1 --start 2019-01-01 --end 2024-01-01 --follow`
+- Strategy needs to be accessible to the sandbox containers (may need rebuild).
+- This is a MIXED task — training + evaluation. Need to assess accuracy vs 25% baseline.
+
+## Task 4.4 Complete: Train and Evaluate Regime Classifier
+
+**Gotchas:**
+- `output_dim` was not being propagated to `MLPTradingModel.build_model()`. The model hardcoded 3 output neurons for classification. Fixed by: (1) adding `num_classes` config field to MLP `build_model()`, (2) injecting `num_classes: output_dim` into model_config in `TrainingPipeline.create_model()`.
+- THREE places needed `output_dim` fixes: `local_orchestrator.py`, `training-host-service/orchestrator.py`, AND `ktrdr/neural/models/mlp.py`.
+- CLI command is `ktrdr train` (not `ktrdr models train`), flags are `--start`/`--end` (not `--start-date`/`--end-date`).
+- Strategy must be copied to `~/.ktrdr/shared/strategies/` for sandbox containers to access it.
+- Sandbox agent ports (5010, 5020) conflict with prod — doesn't block training since agents not needed.
+
+**Training results:**
+- Test accuracy: 88.2%, F1: 0.83, Precision: 0.78, Recall: 0.88
+- Val accuracy: 91.1%, Train accuracy: 91.5%
+- Label distribution: {TRENDING_UP: 876, TRENDING_DOWN: 1014, RANGING: 25420, VOLATILE: 669}
+- Class imbalance (91% RANGING) inflates accuracy — a always-RANGING baseline would get ~91%
+- Model saved to `models/regime_classifier_seed/1h_v1` with `output_type: regime_classification`
+
+**Next task notes (4.5):**
+- VALIDATION task — use E2E agent workflow
+- Model exists at `models/regime_classifier_seed/1h_v1` with all artifacts
