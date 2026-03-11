@@ -262,6 +262,14 @@ class LocalTrainingOrchestrator:
                 "source": "forward_return",
                 "horizon": labels_config.get("horizon", 20),
             }
+        elif label_source == "regime":
+            label_config = {
+                "source": "regime",
+                "horizon": labels_config.get("horizon", 24),
+                "trending_threshold": labels_config.get("trending_threshold", 0.5),
+                "vol_crisis_threshold": labels_config.get("vol_crisis_threshold", 2.0),
+                "vol_lookback": labels_config.get("vol_lookback", 120),
+            }
         else:
             label_config = {
                 "source": "zigzag",
@@ -272,14 +280,14 @@ class LocalTrainingOrchestrator:
         labels = TrainingPipeline.create_labels(price_data, label_config)
 
         # Align features and labels
-        # For forward_return labels: labels are shorter (last `horizon` bars dropped),
+        # For forward_return/regime labels: labels are shorter (last `horizon` bars dropped),
         # so truncate features from the front to match
-        if label_source == "forward_return" and len(labels) < len(features):
+        if label_source in ("forward_return", "regime") and len(labels) < len(features):
             truncated_from = len(features)
             features = features[: len(labels)]  # type: ignore[assignment]
             logger.info(
                 f"Truncated features from {truncated_from} to {len(features)} "
-                f"to match forward return labels (horizon={labels_config.get('horizon', 20)})"
+                f"to match {label_source} labels (horizon={labels_config.get('horizon', 20)})"
             )
 
         min_len = min(len(features), len(labels))
