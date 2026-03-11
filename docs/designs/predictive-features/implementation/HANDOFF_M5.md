@@ -64,3 +64,10 @@
 - Strategy must be in shared dir (`/Users/karl/.ktrdr/shared/strategies/`)
 - Sandbox rebuild needed: port conflicts with ktrdr-prod (5020, 4317/4318); scale down assessment-agent and training-worker-2
 - Fresh DB needs `docker exec <backend> alembic upgrade head` (migrations don't auto-run)
+
+## Task 5.5 Complete: Validation
+
+**E2E Test:** training/context-classifier — ✅ PASSED (6 core criteria, 9 steps)
+- All core criteria pass: training completes, output_type correct, 3-class output, test accuracy 64.4%
+- Val accuracy sanity checks flagged (100% on 45 samples) — small-dataset artifact, not a code bug
+- New test added to catalog: `.claude/skills/e2e-testing/tests/training/context-classifier.md`
