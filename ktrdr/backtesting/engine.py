@@ -6,6 +6,7 @@ DecisionOrchestrator is not imported — it is preserved for future paper/live
 trading use (see DESIGN.md for rationale).
 """
 
+import asyncio
 import time
 from dataclasses import dataclass, field
 from typing import Any, Callable, Optional, cast
@@ -136,6 +137,10 @@ class BacktestingEngine:
         # Data loading
         self.repository = DataRepository()
 
+        # Context data (external data from FRED, IB cross-pair, CFTC, etc.)
+        # Loaded from model metadata if the model was trained with context data
+        self._context_data: dict[str, pd.DataFrame] | None = None
+
     def _get_decisions_config(self) -> dict[str, Any]:
         """Extract decisions config as a plain dict from strategy_config."""
         sc = self.bundle.strategy_config
@@ -195,12 +200,18 @@ class BacktestingEngine:
                 f"No data for {self.config.symbol} {self.config.timeframe}"
             )
 
-        # 2. Pre-compute features
+        # 2. Load context data if model was trained with it
+        if self.bundle.metadata.context_data_config:
+            self._context_data = self._load_context_data(data)
+
+        # 3. Pre-compute features (with context data if available)
         with tracer.start_as_current_span("backtest.feature_compute") as span:
             span.set_attribute("data.rows", len(data))
-            self.feature_cache.compute_all_features(multi_tf_data)
+            self.feature_cache.compute_all_features(
+                multi_tf_data, context_data=self._context_data
+            )
 
-        # 3. Simulate
+        # 4. Simulate
         start_idx = (resume_start_bar + 50) if resume_start_bar is not None else 50
         if start_idx >= len(data):
             raise ValueError(
@@ -266,7 +277,7 @@ class BacktestingEngine:
             self._maybe_checkpoint(idx, start_idx, timestamp, checkpoint_callback)
             self._check_cancellation(idx, start_idx, len(data), cancellation_token)
 
-        # 4. Force-close and generate results
+        # 5. Force-close and generate results
         self._force_close_position(data)
         return self._generate_results(execution_start)
 
@@ -389,8 +400,14 @@ class BacktestingEngine:
             f"Loaded {len(data):,} bars from {data.index[0]} to {data.index[-1]}"
         )
 
-        # 2. Compute features for full range
-        self.feature_cache.compute_all_features(multi_tf_data)
+        # 2. Load context data if model was trained with it
+        if self.bundle.metadata.context_data_config:
+            self._context_data = self._load_context_data(data)
+
+        # 3. Compute features for full range
+        self.feature_cache.compute_all_features(
+            multi_tf_data, context_data=self._context_data
+        )
         logger.info("Feature cache ready")
 
         # 3. Restore portfolio state
@@ -498,6 +515,86 @@ class BacktestingEngine:
             if mode == "multi_timeframe" and tf_list and len(tf_list) >= 2:
                 return list(tf_list)
         return [self.config.timeframe]
+
+    def _load_context_data(self, primary_data: pd.DataFrame) -> dict[str, pd.DataFrame]:
+        """Load context data from model metadata for backtesting.
+
+        Mirrors the training pipeline's context data loading: reads
+        context_data_config from model metadata, fetches from providers,
+        aligns to primary data index.
+
+        Args:
+            primary_data: The base timeframe's OHLCV DataFrame (for index alignment).
+
+        Returns:
+            Dict mapping source_id to aligned DataFrames.
+
+        Raises:
+            RuntimeError: If context data cannot be fetched (API down, missing cache).
+        """
+        from ..config.models import ContextDataEntry
+        from ..data.context.base import ContextDataAligner
+        from ..data.context.registry import ContextDataProviderRegistry
+
+        metadata = self.bundle.metadata
+        if not metadata.context_data_config:
+            return {}
+
+        registry = ContextDataProviderRegistry()
+        aligner = ContextDataAligner()
+        primary_index = pd.DatetimeIndex(primary_data.index)
+
+        # Derive date range from primary data
+        start_dt = primary_index[0].to_pydatetime()
+        end_dt = primary_index[-1].to_pydatetime()
+        # Strip timezone for provider API calls
+        if start_dt.tzinfo is not None:
+            start_dt = start_dt.replace(tzinfo=None)
+        if end_dt.tzinfo is not None:
+            end_dt = end_dt.replace(tzinfo=None)
+
+        logger.info(
+            f"Loading context data: {len(metadata.context_data_config)} entries "
+            f"({start_dt.date()} to {end_dt.date()})"
+        )
+
+        context_config = metadata.context_data_config  # Already checked non-None above
+
+        async def _fetch_all() -> dict[str, pd.DataFrame]:
+            result: dict[str, pd.DataFrame] = {}
+            for entry_dict in context_config:
+                entry = ContextDataEntry(**entry_dict)
+                provider_name = entry.provider
+
+                try:
+                    provider = registry.get(provider_name)
+                except KeyError as e:
+                    raise RuntimeError(
+                        f"Context data provider '{provider_name}' not available. "
+                        f"Model was trained with this provider but it's not registered. "
+                        f"Available: {registry.available_providers()}"
+                    ) from e
+
+                try:
+                    results = await provider.fetch(entry, start_dt, end_dt)
+                except Exception as e:
+                    raise RuntimeError(
+                        f"Failed to fetch context data from '{provider_name}': {e}. "
+                        f"Context data is required for this model — "
+                        f"backtest cannot proceed without it."
+                    ) from e
+
+                for ctx_result in results:
+                    aligned = aligner.align(ctx_result.data, primary_index)
+                    result[ctx_result.source_id] = aligned
+                    logger.info(
+                        f"  Context '{ctx_result.source_id}': "
+                        f"{len(ctx_result.data)} raw → {len(aligned)} aligned rows"
+                    )
+
+            return result
+
+        return asyncio.run(_fetch_all())
 
     def _load_historical_data(self) -> dict[str, pd.DataFrame]:
         """Load historical data for backtesting from cache.

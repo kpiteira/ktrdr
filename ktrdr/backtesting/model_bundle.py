@@ -146,6 +146,15 @@ def reconstruct_config_from_metadata(
         history_required=100,
     )
 
+    # Reconstruct context_data from metadata if present
+    context_data = None
+    if metadata.context_data_config:
+        from ktrdr.config.models import ContextDataEntry
+
+        context_data = [
+            ContextDataEntry(**entry) for entry in metadata.context_data_config
+        ]
+
     return StrategyConfigurationV3(
         name=metadata.strategy_name,
         version=metadata.strategy_version,
@@ -157,6 +166,7 @@ def reconstruct_config_from_metadata(
         decisions=decisions_config or {"output_format": "classification"},
         training=training_config or {"epochs": 1},
         training_data=training_data,
+        context_data=context_data,
     )
 
 
