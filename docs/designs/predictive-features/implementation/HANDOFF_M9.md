@@ -69,3 +69,18 @@
 - Strategy needs real data: EURUSD and GBPUSD cached, FRED API key configured
 - Backtest: `ktrdr backtest run eurusd_carry_momentum_v1 EURUSD 1h --start-date 2024-01-01 --end-date 2025-01-01`
 - Engine will auto-load context data from model metadata (Task 9.1 work)
+
+## Task 9.5 Complete: Backtest with External Data (Integration Tests)
+
+**What was implemented:**
+- 6 integration tests in `tests/integration/backtesting/test_context_data_backtest_integration.py`
+- Tests validate full internal pipeline with synthetic data: config reconstruction, FeatureCache with all 3 context sources, feature ordering, missing context error handling, backward compatibility
+- Fixed `test_registry.py::test_available_providers` — was hardcoded to `['fred', 'ib']`, now accounts for `cftc_cot`
+
+**Gotchas:**
+- Integration tests use realistic synthetic data (not mocked) through real IndicatorEngine + FuzzyEngine
+- `reconstruct_config_from_metadata` returns config where `model_extra` stores `data_source` — must access via `.model_extra["data_source"]` not `.data_source`
+
+**Next Task Notes (9.6 - E2E Validation):**
+- E2E test should exercise the real backtest CLI or engine with external data providers
+- Requires sandbox running with FRED API key and cached IB data
