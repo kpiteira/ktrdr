@@ -160,7 +160,9 @@ class HostTrainingOrchestrator:
             # The bridge is callable and receives (epoch, batch, metrics) from TrainingPipeline
             progress_bridge = self._session.progress_bridge
             if progress_bridge is None:
-                raise RuntimeError(f"No progress bridge registered for session {self._session.session_id}")
+                raise RuntimeError(
+                    f"No progress bridge registered for session {self._session.session_id}"
+                )
 
             # Create adapter callback that receives TrainingPipeline callbacks
             # and translates them to bridge method calls
@@ -214,10 +216,16 @@ class HostTrainingOrchestrator:
             logger.info("HOST TRAINING RESULT STRUCTURE (before storing)")
             logger.info(f"  Keys: {list(result.keys())}")
             logger.info(f"  model_path: {result.get('model_path')}")
-            logger.info(f"  training_metrics keys: {list(result.get('training_metrics', {}).keys())}")
-            logger.info(f"  test_metrics keys: {list(result.get('test_metrics', {}).keys())}")
+            logger.info(
+                f"  training_metrics keys: {list(result.get('training_metrics', {}).keys())}"
+            )
+            logger.info(
+                f"  test_metrics keys: {list(result.get('test_metrics', {}).keys())}"
+            )
             logger.info(f"  artifacts keys: {list(result.get('artifacts', {}).keys())}")
-            logger.info(f"  resource_usage keys: {list(result.get('resource_usage', {}).keys())}")
+            logger.info(
+                f"  resource_usage keys: {list(result.get('resource_usage', {}).keys())}"
+            )
             logger.info("=" * 80)
 
             # Update session status
@@ -289,7 +297,8 @@ class HostTrainingOrchestrator:
                         context={
                             k: v
                             for k, v in metrics.items()
-                            if k in ("timeframes", "total_indicators", "total_fuzzy_sets")
+                            if k
+                            in ("timeframes", "total_indicators", "total_fuzzy_sets")
                         },
                     )
                 elif progress_type == "preparation":
@@ -316,7 +325,9 @@ class HostTrainingOrchestrator:
                         metrics=metrics,
                     )
                 elif progress_type == "epoch":
-                    bridge.on_epoch(epoch=epoch, total_epochs=total_epochs, metrics=metrics)
+                    bridge.on_epoch(
+                        epoch=epoch, total_epochs=total_epochs, metrics=metrics
+                    )
                 else:
                     # Phase change or general update
                     message = metrics.get("message") or "Training update"
@@ -326,7 +337,9 @@ class HostTrainingOrchestrator:
 
             # Also update session directly (for /training/status endpoint)
             # This ensures backward compatibility
-            self._session.update_progress(epoch=epoch, batch=metrics.get("batch", 0), metrics=metrics)
+            self._session.update_progress(
+                epoch=epoch, batch=metrics.get("batch", 0), metrics=metrics
+            )
 
         return callback
 
@@ -368,9 +381,7 @@ class HostTrainingOrchestrator:
                     f"Computing {indicator_name} ({indicator_index}/{total_indicators})"
                 )
 
-                logger.info(
-                    f"Session {self._session.session_id}: {message}"
-                )
+                logger.info(f"Session {self._session.session_id}: {message}")
 
                 self._session.update_progress(
                     epoch=0,  # Pre-training phase
@@ -397,9 +408,7 @@ class HostTrainingOrchestrator:
                     f"Fuzzifying {fuzzy_set_name} ({fuzzy_index}/{total_fuzzy_sets})"
                 )
 
-                logger.info(
-                    f"Session {self._session.session_id}: {message}"
-                )
+                logger.info(f"Session {self._session.session_id}: {message}")
 
                 self._session.update_progress(
                     epoch=0,  # Pre-training phase
@@ -431,7 +440,7 @@ class HostTrainingOrchestrator:
                     step_emoji = "🏷️"
 
                 # Format base message
-                step_name = step.replace('_', ' ').title()
+                step_name = step.replace("_", " ").title()
                 base_message = f"{step_emoji} Processing {symbol} ({symbol_index}/{total_symbols}) - {step_name}"
 
                 # Add total counts to message if available
@@ -442,9 +451,7 @@ class HostTrainingOrchestrator:
                 else:
                     message = base_message
 
-                logger.info(
-                    f"Session {self._session.session_id}: {message}"
-                )
+                logger.info(f"Session {self._session.session_id}: {message}")
 
                 self._session.update_progress(
                     epoch=0,  # Pre-training phase
@@ -471,9 +478,7 @@ class HostTrainingOrchestrator:
                 else:
                     message = f"⚙️ {phase.replace('_', ' ').title()}"
 
-                logger.info(
-                    f"Session {self._session.session_id}: {message}"
-                )
+                logger.info(f"Session {self._session.session_id}: {message}")
 
                 self._session.update_progress(
                     epoch=0,  # Pre-training phase
@@ -669,9 +674,7 @@ class HostTrainingOrchestrator:
 
         # Write strategy config to temp file for loader (it expects a file path)
 
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".yaml", delete=False
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             yaml.dump(strategy_config, f)
             strategy_path = f.name
 
@@ -694,13 +697,17 @@ class HostTrainingOrchestrator:
             all_data: dict[str, dict[str, Any]] = {}
             for i, symbol in enumerate(symbols, 1):
                 if progress_callback:
-                    progress_callback(0, 0, {
-                        "progress_type": "preprocessing",
-                        "symbol": symbol,
-                        "symbol_index": i,
-                        "total_symbols": len(symbols),
-                        "step": "loading_data",
-                    })
+                    progress_callback(
+                        0,
+                        0,
+                        {
+                            "progress_type": "preprocessing",
+                            "symbol": symbol,
+                            "symbol_index": i,
+                            "total_symbols": len(symbols),
+                            "step": "loading_data",
+                        },
+                    )
 
                 symbol_data = TrainingPipeline.load_market_data(
                     symbol=symbol,
@@ -717,19 +724,24 @@ class HostTrainingOrchestrator:
 
             # Load context data if strategy uses external data sources
             context_data = None
-            if hasattr(v3_config, 'context_data') and v3_config.context_data:
+            if hasattr(v3_config, "context_data") and v3_config.context_data:
                 import asyncio
-                context_data = asyncio.run(self._load_context_data(
-                    v3_config, start_date, end_date, all_data
-                ))
+
+                context_data = asyncio.run(
+                    self._load_context_data(v3_config, start_date, end_date, all_data)
+                )
 
             # Prepare features using v3 pipeline
             logger.info("Preparing features with TrainingPipelineV3...")
             if progress_callback:
-                progress_callback(0, 0, {
-                    "progress_type": "preparation",
-                    "phase": "preparing_features",
-                })
+                progress_callback(
+                    0,
+                    0,
+                    {
+                        "progress_type": "preparation",
+                        "phase": "preparing_features",
+                    },
+                )
             features_df = pipeline.prepare_features(all_data, context_data=context_data)
 
             # Handle NaN values before converting to tensor
@@ -757,6 +769,13 @@ class HostTrainingOrchestrator:
                     "source": "forward_return",
                     "horizon": labels_config.get("horizon", 20),
                 }
+            elif label_source == "context":
+                label_config = {
+                    "source": "context",
+                    "horizon": labels_config.get("horizon", 5),
+                    "bullish_threshold": labels_config.get("bullish_threshold", 0.005),
+                    "bearish_threshold": labels_config.get("bearish_threshold", -0.005),
+                }
             else:
                 label_config = {
                     "zigzag_threshold": labels_config.get("zigzag_threshold", 0.02),
@@ -768,12 +787,14 @@ class HostTrainingOrchestrator:
             # Align features and labels
             # For forward_return labels: labels are shorter (last `horizon` bars dropped),
             # so truncate features from the front to match
-            if label_source == "forward_return" and len(labels) < len(features):
+            if label_source in ("forward_return", "context") and len(labels) < len(
+                features
+            ):
                 logger.info(
                     f"Truncated features from {len(features)} to {len(labels)} "
-                    f"to match forward return labels (horizon={labels_config.get('horizon', 20)})"
+                    f"to match {label_source} labels (horizon={labels_config.get('horizon')})"
                 )
-                features = features[:len(labels)]
+                features = features[: len(labels)]
 
             min_len = min(len(features), len(labels))
             if min_len == 0:
@@ -783,15 +804,21 @@ class HostTrainingOrchestrator:
             features_aligned = features[-min_len:]
             labels_aligned = labels[-min_len:]
 
-            logger.info(f"V3 features: {features_aligned.shape}, labels: {labels_aligned.shape}")
+            logger.info(
+                f"V3 features: {features_aligned.shape}, labels: {labels_aligned.shape}"
+            )
 
             # Split data
             if progress_callback:
-                progress_callback(0, 0, {
-                    "progress_type": "preparation",
-                    "phase": "splitting_data",
-                    "total_samples": len(features_aligned),
-                })
+                progress_callback(
+                    0,
+                    0,
+                    {
+                        "progress_type": "preparation",
+                        "phase": "splitting_data",
+                        "total_samples": len(features_aligned),
+                    },
+                )
 
             data_split = training_section.get("data_split", {})
             train_ratio = data_split.get("train", 0.7)
@@ -808,15 +835,21 @@ class HostTrainingOrchestrator:
             X_test = features_aligned[val_end:]
             y_test = labels_aligned[val_end:]
 
-            logger.info(f"V3 splits: train={len(X_train)}, val={len(X_val)}, test={len(X_test)}")
+            logger.info(
+                f"V3 splits: train={len(X_train)}, val={len(X_val)}, test={len(X_test)}"
+            )
 
             # Create model
             if progress_callback:
-                progress_callback(0, 0, {
-                    "progress_type": "preparation",
-                    "phase": "creating_model",
-                    "input_dim": features.shape[1],
-                })
+                progress_callback(
+                    0,
+                    0,
+                    {
+                        "progress_type": "preparation",
+                        "phase": "creating_model",
+                        "input_dim": features.shape[1],
+                    },
+                )
 
             # Determine output format from decisions config
             decisions_config = strategy_config.get("decisions", {})
@@ -843,15 +876,21 @@ class HostTrainingOrchestrator:
             training_section_for_config = strategy_config.get("training", {})
             training_config: dict[str, Any] = {
                 "epochs": training_section_for_config.get("epochs", 100),
-                "learning_rate": training_section_for_config.get("learning_rate", 0.001),
+                "learning_rate": training_section_for_config.get(
+                    "learning_rate", 0.001
+                ),
                 "batch_size": training_section_for_config.get("batch_size", 32),
             }
 
             # Inject regression config into training config
             if output_format == "regression":
                 training_config["output_format"] = "regression"
-                training_config["loss"] = training_section_for_config.get("loss", "huber")
-                training_config["huber_delta"] = training_section_for_config.get("huber_delta", 0.01)
+                training_config["loss"] = training_section_for_config.get(
+                    "loss", "huber"
+                )
+                training_config["huber_delta"] = training_section_for_config.get(
+                    "huber_delta", 0.01
+                )
                 training_config["weight_decay"] = 0.0
             training_results = TrainingPipeline.train_model(
                 model=model,
@@ -934,6 +973,7 @@ class HostTrainingOrchestrator:
         finally:
             # Clean up temp file
             import os
+
             try:
                 os.unlink(strategy_path)
             except Exception:
@@ -971,8 +1011,14 @@ class HostTrainingOrchestrator:
         first_tf = next(iter(all_data[first_symbol]))
         primary_index = all_data[first_symbol][first_tf].index
 
-        start_dt = dt_cls.fromisoformat(start_date) if isinstance(start_date, str) else start_date
-        end_dt = dt_cls.fromisoformat(end_date) if isinstance(end_date, str) else end_date
+        start_dt = (
+            dt_cls.fromisoformat(start_date)
+            if isinstance(start_date, str)
+            else start_date
+        )
+        end_dt = (
+            dt_cls.fromisoformat(end_date) if isinstance(end_date, str) else end_date
+        )
 
         for entry in v3_config.context_data:
             provider = registry.get(entry.provider)
@@ -1019,10 +1065,16 @@ class HostTrainingOrchestrator:
             # Collect source IDs from provider
             try:
                 from ktrdr.data.context.registry import ContextDataProviderRegistry
+
                 registry = ContextDataProviderRegistry()
                 for entry_data in raw_context_data:
                     from ktrdr.config.models import ContextDataEntry
-                    entry_obj = entry_data if isinstance(entry_data, ContextDataEntry) else ContextDataEntry(**entry_data)
+
+                    entry_obj = (
+                        entry_data
+                        if isinstance(entry_data, ContextDataEntry)
+                        else ContextDataEntry(**entry_data)
+                    )
                     provider = registry.get(entry_obj.provider)
                     context_source_ids.extend(provider.get_source_ids(entry_obj))
             except Exception as e:

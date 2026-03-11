@@ -466,6 +466,34 @@ class TrainingPipeline:
             )
             return label_tensor
 
+        if source == "context":
+            from ktrdr.training.context_labeler import ContextLabeler
+
+            horizon = label_config.get("horizon", 5)
+            bullish_threshold = label_config.get("bullish_threshold", 0.005)
+            bearish_threshold = label_config.get("bearish_threshold", -0.005)
+            logger.info(
+                f"TrainingPipeline.create_labels() - Context labels "
+                f"(horizon={horizon}, bullish={bullish_threshold}, "
+                f"bearish={bearish_threshold}, bars={len(tf_price_data)})"
+            )
+            ctx_labeler = ContextLabeler(
+                horizon=horizon,
+                bullish_threshold=bullish_threshold,
+                bearish_threshold=bearish_threshold,
+            )
+            labels = ctx_labeler.label(tf_price_data)
+            # Drop trailing NaN bars (last `horizon` bars have no future data)
+            valid_labels = labels.dropna()
+            label_tensor = torch.LongTensor(valid_labels.values.astype(int))
+
+            unique, counts = torch.unique(label_tensor, return_counts=True)
+            dist = {int(u): int(c) for u, c in zip(unique, counts)}
+            logger.info(
+                f"Generated {len(label_tensor)} context labels - Distribution: {dist}"
+            )
+            return label_tensor
+
         # Default: ZigZag classification labels
         logger.info(
             f"TrainingPipeline.create_labels() - ZigZag labels "
@@ -1022,8 +1050,7 @@ class TrainingPipelineV3:
         result = result[available_expected]
 
         logger.info(
-            f"Features prepared: {result.shape[0]} samples, "
-            f"{result.shape[1]} features"
+            f"Features prepared: {result.shape[0]} samples, {result.shape[1]} features"
         )
 
         return result
