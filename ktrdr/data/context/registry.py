@@ -25,8 +25,10 @@ class ContextDataProviderRegistry:
     def _register_builtins(self) -> None:
         """Register built-in providers."""
         from .fred_provider import FredDataProvider
+        from .ib_context_provider import IbContextProvider
 
         self._providers["fred"] = FredDataProvider
+        self._providers["ib"] = IbContextProvider
 
     def register(self, name: str, provider_class: type[ContextDataProvider]) -> None:
         """Register a provider class by name.
