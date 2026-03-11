@@ -49,6 +49,91 @@ FUZZY_TYPE_PARAM_COUNTS: dict[str, int] = {
 }
 
 
+def _validate_data_source_references(
+    config: Any,
+    errors: list[str],
+    warnings: "list[StrategyValidationWarning]",
+) -> None:
+    """Validate that indicator data_source references resolve to context_data entries.
+
+    Rules:
+    1. Every data_source in indicators must match a source ID from context_data
+    2. Warn if context_data entries are declared but unused by any indicator
+    """
+    # Collect all data_source references from indicators
+    data_source_refs: dict[str, str] = {}  # indicator_id -> data_source
+    for ind_id, ind_def in config.indicators.items():
+        ds = getattr(ind_def, "model_extra", {}).get("data_source")
+        if ds is not None:
+            data_source_refs[ind_id] = ds
+
+    # If no data_source references and no context_data, nothing to validate
+    if not data_source_refs and not config.context_data:
+        return
+
+    # Build set of available source IDs from context_data
+    available_source_ids: set[str] = set()
+    if config.context_data:
+        from ktrdr.data.context.registry import ContextDataProviderRegistry
+
+        registry = ContextDataProviderRegistry()
+        # Register known providers for source ID computation
+        try:
+            from ktrdr.data.context.fred_provider import FredDataProvider
+
+            registry.register("fred", FredDataProvider)
+        except ImportError:
+            pass
+
+        for entry in config.context_data:
+            try:
+                provider = registry.get(entry.provider)
+                source_ids = provider.get_source_ids(entry)
+                available_source_ids.update(source_ids)
+            except KeyError:
+                # Unknown provider — compute basic source IDs
+                if entry.symbol:
+                    available_source_ids.add(entry.symbol)
+                if entry.series:
+                    if isinstance(entry.series, str):
+                        available_source_ids.add(f"fred_{entry.series}")
+                    elif isinstance(entry.series, list):
+                        for s in entry.series:
+                            available_source_ids.add(f"fred_{s}")
+                        if len(entry.series) >= 2:
+                            available_source_ids.add(
+                                f"yield_spread_{entry.series[0]}_{entry.series[1]}"
+                            )
+
+    # Check each data_source reference
+    used_source_ids: set[str] = set()
+    for ind_id, ds in data_source_refs.items():
+        used_source_ids.add(ds)
+        if ds not in available_source_ids:
+            context_hint = ""
+            if not config.context_data:
+                context_hint = " (no context_data declared)"
+            errors.append(
+                f"indicators.{ind_id}.data_source: '{ds}' does not match any "
+                f"context_data source ID{context_hint}. "
+                f"Available source IDs: {sorted(available_source_ids) if available_source_ids else 'none'}"
+            )
+
+    # Warn about unused context_data entries
+    if config.context_data:
+        unused_source_ids = available_source_ids - used_source_ids
+        if unused_source_ids and not data_source_refs:
+            # All context_data is unused
+            warnings.append(
+                StrategyValidationWarning(
+                    message=(
+                        "context_data entries declared but no indicators reference them via data_source"
+                    ),
+                    location="context_data",
+                )
+            )
+
+
 def _validate_regression_config(
     decisions: dict[str, Any],
     training: dict[str, Any] | None = None,
@@ -1248,6 +1333,9 @@ def validate_v3_strategy(
                 f"Fuzzy set has no membership functions defined. "
                 f"At least one membership function is required (e.g., oversold, overbought)."
             )
+
+    # Validation: data_source references resolve to context_data entries
+    _validate_data_source_references(config, errors, warnings)
 
     # Validation 5: Warn about unused indicators
     all_indicators = set(config.indicators.keys())

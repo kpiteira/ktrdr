@@ -3,8 +3,6 @@
 All backtest entry points should default to 0.0005 (0.05%) slippage.
 """
 
-
-
 STANDARD_SLIPPAGE = 0.0005  # 0.05%
 
 

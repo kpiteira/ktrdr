@@ -17,6 +17,7 @@ from .settings import (
     AuthSettings,
     DatabaseSettings,
     DataSettings,
+    FredSettings,
     LoggingSettings,
     ObservabilitySettings,
     # M4 Settings classes
@@ -33,6 +34,7 @@ from .settings import (
     get_auth_settings,
     get_data_settings,
     get_db_settings,
+    get_fred_settings,
     get_logging_settings,
     get_observability_settings,
     # M4 Getters
@@ -66,6 +68,7 @@ __all__ = [
     "AgentSettings",
     "AgentGateSettings",
     "DataSettings",
+    "FredSettings",
     # Cached getters (M1 + M2)
     "get_api_settings",
     "get_auth_settings",
@@ -79,6 +82,7 @@ __all__ = [
     "get_agent_settings",
     "get_agent_gate_settings",
     "get_data_settings",
+    "get_fred_settings",
     # Utilities
     "clear_settings_cache",
     "deprecated_field",

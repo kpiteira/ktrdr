@@ -76,6 +76,7 @@ SANDBOX_SECRETS_MAPPING = {
     "jwt_secret": "KTRDR_AUTH_JWT_SECRET",
     "anthropic_api_key": "ANTHROPIC_API_KEY",  # Third-party, keep original name
     "grafana_password": "GF_ADMIN_PASSWORD",  # Third-party, keep original name
+    "fred_api_key": "KTRDR_FRED_API_KEY",
 }
 
 

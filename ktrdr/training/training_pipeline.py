@@ -906,13 +906,17 @@ class TrainingPipelineV3:
         )
 
     def prepare_features(
-        self, data: dict[str, dict[str, pd.DataFrame]]
+        self,
+        data: dict[str, dict[str, pd.DataFrame]],
+        context_data: Optional[dict[str, pd.DataFrame]] = None,
     ) -> pd.DataFrame:
         """
         Prepare NN input features from multi-symbol, multi-timeframe data.
 
         Args:
             data: {symbol: {timeframe: DataFrame}}
+            context_data: Optional dict mapping source keys to DataFrames
+                for indicators with data_source (e.g., FRED yield spreads)
 
         Returns:
             Feature DataFrame with columns matching resolved feature_ids,
@@ -945,7 +949,10 @@ class TrainingPipelineV3:
 
                 # Compute required indicators for this timeframe
                 indicator_df = self.indicator_engine.compute_for_timeframe(
-                    df, timeframe, reqs["indicators"]
+                    df,
+                    timeframe,
+                    reqs["indicators"],
+                    context_data=context_data,
                 )
 
                 # Apply fuzzy sets to compute membership values
