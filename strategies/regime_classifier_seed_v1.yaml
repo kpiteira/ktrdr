@@ -1,0 +1,125 @@
+# =============================================================================
+# REGIME CLASSIFIER SEED STRATEGY
+# =============================================================================
+# Seed regime classifier using volatility and trend strength indicators.
+# Predicts 4 classes: 0=TRENDING_UP, 1=TRENDING_DOWN, 2=RANGING, 3=VOLATILE.
+#
+# Why these indicators:
+# - ATR (short + long): NN learns ratio → volatility expansion/contraction
+# - Bollinger Band Width: normalized volatility, complementary to ATR
+# - ADX + DI+: trend strength and directional bias
+# - Squeeze Intensity: energy building before breakout
+#
+# This is a starting point for the Researcher to evolve.
+# =============================================================================
+
+name: regime_classifier_seed
+version: "3.0"
+description: >
+  Seed regime classifier using volatility and trend strength indicators.
+  Predicts: 0=TRENDING_UP, 1=TRENDING_DOWN, 2=RANGING, 3=VOLATILE.
+  This is a starting point for the Researcher to evolve.
+
+training_data:
+  symbols:
+    mode: single
+    symbol: EURUSD
+  timeframes:
+    mode: single
+    timeframe: 1h
+  history_required: 200
+  start_date: "2019-01-01"
+  end_date: "2024-01-01"
+
+indicators:
+  atr_14:
+    type: atr
+    period: 14
+  atr_50:
+    type: atr
+    period: 50
+  bbwidth_20:
+    type: bollingerbandwidth
+    period: 20
+  adx_14:
+    type: adx
+    period: 14
+  squeeze_20:
+    type: squeezeintensity
+    period: 20
+
+fuzzy_sets:
+  atr_short:
+    indicator: atr_14
+    low: [0, 0.0005, 0.001]
+    medium: [0.0005, 0.001, 0.002]
+    high: [0.001, 0.002, 0.005]
+
+  atr_long:
+    indicator: atr_50
+    low: [0, 0.0005, 0.001]
+    medium: [0.0005, 0.001, 0.002]
+    high: [0.001, 0.002, 0.005]
+
+  bbwidth_level:
+    indicator: bbwidth_20
+    tight: [0, 0.01, 0.02]
+    normal: [0.01, 0.03, 0.05]
+    wide: [0.03, 0.06, 0.10]
+
+  adx_strength:
+    indicator: adx_14.adx
+    weak: [0, 10, 20]
+    moderate: [15, 25, 35]
+    strong: [25, 40, 60]
+
+  trend_direction:
+    indicator: adx_14.plus_di
+    weak: [0, 10, 20]
+    strong: [20, 30, 50]
+
+  squeeze_level:
+    indicator: squeeze_20
+    relaxed: [0, 0.2, 0.4]
+    building: [0.3, 0.5, 0.7]
+    squeezed: [0.6, 0.8, 1.0]
+
+nn_inputs:
+  - fuzzy_set: atr_short
+    timeframes: all
+  - fuzzy_set: atr_long
+    timeframes: all
+  - fuzzy_set: bbwidth_level
+    timeframes: all
+  - fuzzy_set: adx_strength
+    timeframes: all
+  - fuzzy_set: trend_direction
+    timeframes: all
+  - fuzzy_set: squeeze_level
+    timeframes: all
+
+model:
+  type: mlp
+  architecture:
+    hidden_layers: [64, 32]
+    dropout: 0.2
+    activation: relu
+
+decisions:
+  output_format: classification
+  confidence_threshold: 0.4
+
+training:
+  labels:
+    source: regime
+    horizon: 24
+    trending_threshold: 0.5
+    vol_crisis_threshold: 2.0
+    vol_lookback: 120
+  loss: cross_entropy
+  epochs: 100
+  learning_rate: 0.001
+  data_split:
+    train: 0.7
+    validation: 0.15
+    test: 0.15
