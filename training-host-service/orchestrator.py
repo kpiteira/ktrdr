@@ -1080,6 +1080,22 @@ class HostTrainingOrchestrator:
             except Exception as e:
                 logger.warning(f"Could not resolve context source IDs: {e}")
 
+        # Determine output_type from label source
+        label_source = (
+            config.get("training", {}).get("labels", {}).get("source", "zigzag")
+        )
+        output_format = config.get("decisions", {}).get(
+            "output_format", "classification"
+        )
+        if label_source == "context":
+            output_type = "context_classification"
+        elif label_source == "regime":
+            output_type = "regime_classification"
+        elif output_format == "regression":
+            output_type = "regression"
+        else:
+            output_type = "classification"
+
         metadata = ModelMetadataV3(
             model_name=config.get("name", "unknown"),
             strategy_name=config.get("name", "unknown"),
@@ -1091,6 +1107,7 @@ class HostTrainingOrchestrator:
             training_symbols=training_symbols,
             training_timeframes=training_timeframes,
             training_metrics=training_metrics,
+            output_type=output_type,
             context_data_config=context_data_config,
             context_source_ids=context_source_ids,
         )

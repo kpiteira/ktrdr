@@ -226,3 +226,70 @@ class TestModelMetadataV3Defaults:
         assert meta.training_symbols == []
         assert meta.training_timeframes == []
         assert meta.training_metrics == {}
+        assert meta.output_type == "classification"
+
+
+class TestModelMetadataV3OutputType:
+    """Test output_type field for model classification."""
+
+    def test_default_output_type(self):
+        """Default output_type is 'classification'."""
+        meta = ModelMetadataV3(
+            model_name="test",
+            strategy_name="test",
+            resolved_features=[],
+        )
+        assert meta.output_type == "classification"
+
+    def test_context_classification_output_type(self):
+        """output_type can be set to 'context_classification'."""
+        meta = ModelMetadataV3(
+            model_name="context_model",
+            strategy_name="context_classifier_seed_v1",
+            resolved_features=["1d_roc_10"],
+            output_type="context_classification",
+        )
+        assert meta.output_type == "context_classification"
+
+    def test_output_type_serialization(self):
+        """output_type is included in to_dict() output."""
+        meta = ModelMetadataV3(
+            model_name="test",
+            strategy_name="test",
+            resolved_features=[],
+            output_type="context_classification",
+        )
+        data = meta.to_dict()
+        assert data["output_type"] == "context_classification"
+
+    def test_output_type_deserialization(self):
+        """output_type is restored from from_dict()."""
+        data = {
+            "model_name": "test",
+            "strategy_name": "test",
+            "resolved_features": [],
+            "output_type": "context_classification",
+        }
+        meta = ModelMetadataV3.from_dict(data)
+        assert meta.output_type == "context_classification"
+
+    def test_output_type_default_on_deserialization(self):
+        """Missing output_type in dict defaults to 'classification'."""
+        data = {
+            "model_name": "test",
+            "strategy_name": "test",
+            "resolved_features": [],
+        }
+        meta = ModelMetadataV3.from_dict(data)
+        assert meta.output_type == "classification"
+
+    def test_output_type_roundtrip(self):
+        """output_type survives to_dict() -> from_dict() round-trip."""
+        original = ModelMetadataV3(
+            model_name="ctx",
+            strategy_name="ctx_strat",
+            resolved_features=["feat1"],
+            output_type="context_classification",
+        )
+        restored = ModelMetadataV3.from_dict(original.to_dict())
+        assert restored.output_type == original.output_type
