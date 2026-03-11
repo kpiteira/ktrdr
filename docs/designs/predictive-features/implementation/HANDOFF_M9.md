@@ -32,3 +32,23 @@
 - Task says use `cot_reports` Python library — check if it's already a dependency
 - Weekly data: provider returns weekly DataFrame, alignment handled by `ContextDataAligner`
 - Compute percentile over rolling 52w and 156w windows
+
+## Task 9.3 Complete: CFTC COT Provider
+
+**What was implemented:**
+- `CftcCotProvider` in `ktrdr/data/context/cftc_provider.py`
+- Fetches from CFTC TFF report, parses leveraged fund positions
+- Computes rolling percentile (52w/156w) — 0-100 scale
+- Two source IDs per currency: `cot_{report}_net_pos`, `cot_{report}_net_pct`
+- Registered as "cftc_cot" in registry
+
+**Design decision:** Used CFTC public CSV endpoint directly instead of `cot_reports` library (not installed, avoids adding dependency). TFF report parsing handles column name variations.
+
+**Gotchas:**
+- `_compute_percentiles` uses rolling apply with `raw=False` — needed for correct windowed rank calculation
+- Net percentile uses 52w as primary `close` column (more responsive), 156w as extra column
+
+**Next Task Notes (9.4 - Multi-Source Strategy):**
+- All 3 providers now registered: fred, ib, cftc_cot
+- Strategy YAML needs `context_data` section + `data_source` on indicators
+- Architecture doc Section 2.3 has the carry momentum strategy template
