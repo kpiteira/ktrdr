@@ -1,0 +1,119 @@
+# =============================================================================
+# Context Classifier Seed Strategy v1
+# =============================================================================
+# Daily trend context classifier for multi-timeframe gating.
+# Classifies daily market direction as BULLISH / BEARISH / NEUTRAL
+# using trend momentum and strength indicators on 1d timeframe.
+#
+# Used by Thread 2 (Multi-TF Context) to gate hourly signal models.
+# =============================================================================
+
+name: context_classifier_seed_v1
+version: "3.0"
+description: Daily trend context classifier
+
+training_data:
+  symbols:
+    mode: single
+    symbol: EURUSD
+  timeframes:
+    mode: single
+    timeframe: "1d"
+  history_required: 200
+
+# ---------------------------------------------------------------------------
+# INDICATORS — trend direction and strength on daily timeframe
+# ---------------------------------------------------------------------------
+indicators:
+  roc_10:
+    type: roc               # Short-term rate of change — trend direction proxy
+    period: 10
+  roc_20:
+    type: roc               # Longer-term rate of change
+    period: 20
+  adx_14:
+    type: adx               # Trend strength (direction-agnostic)
+    period: 14
+  rsi_14:
+    type: rsi               # Daily momentum level
+    period: 14
+  ema_20:
+    type: ema               # Price position relative to trend
+    period: 20
+
+# ---------------------------------------------------------------------------
+# FUZZY SETS — interpret indicator values into membership degrees
+# ---------------------------------------------------------------------------
+fuzzy_sets:
+  short_momentum:
+    indicator: roc_10
+    bearish: [-2, -0.5, 0]
+    neutral: [-0.3, 0, 0.3]
+    bullish: [0, 0.5, 2]
+  long_momentum:
+    indicator: roc_20
+    bearish: [-3, -1, 0]
+    neutral: [-0.5, 0, 0.5]
+    bullish: [0, 1, 3]
+  trend_strength:
+    indicator: adx_14.adx   # ADX main line (multi-output: adx, plus_di, minus_di)
+    weak: [0, 10, 20]
+    moderate: [15, 25, 35]
+    strong: [30, 45, 60]
+  daily_rsi:
+    indicator: rsi_14
+    oversold: [0, 30, 45]
+    neutral: [40, 50, 60]
+    overbought: [55, 70, 100]
+
+# ---------------------------------------------------------------------------
+# NN INPUTS — fuzzy outputs fed to neural network
+# ---------------------------------------------------------------------------
+nn_inputs:
+  - fuzzy_set: short_momentum
+    timeframes: ["1d"]
+  - fuzzy_set: long_momentum
+    timeframes: ["1d"]
+  - fuzzy_set: trend_strength
+    timeframes: ["1d"]
+  - fuzzy_set: daily_rsi
+    timeframes: ["1d"]
+
+# ---------------------------------------------------------------------------
+# MODEL — compact MLP for 3-class context classification
+# ---------------------------------------------------------------------------
+model:
+  type: mlp
+  architecture:
+    hidden_layers: [64, 32]
+    activation: relu
+    output_activation: softmax
+    dropout: 0.2
+  training:
+    learning_rate: 0.001
+    epochs: 100
+    early_stopping:
+      enabled: true
+      patience: 15
+
+# ---------------------------------------------------------------------------
+# DECISIONS — context is a gate, not a signal; lower threshold
+# ---------------------------------------------------------------------------
+decisions:
+  output_format: classification
+  confidence_threshold: 0.4
+
+# ---------------------------------------------------------------------------
+# TRAINING — 3-class context labels from forward returns
+# ---------------------------------------------------------------------------
+training:
+  labels:
+    source: context
+    horizon: 5
+    bullish_threshold: 0.005
+    bearish_threshold: -0.005
+  loss: cross_entropy
+  data_split:
+    train: 0.7
+    validation: 0.15
+    test: 0.15
