@@ -52,3 +52,20 @@
 - All 3 providers now registered: fred, ib, cftc_cot
 - Strategy YAML needs `context_data` section + `data_source` on indicators
 - Architecture doc Section 2.3 has the carry momentum strategy template
+
+## Task 9.4 Complete: Train Strategy with Multi-Source Context
+
+**What was implemented:**
+- `strategies/eurusd_carry_momentum_v1.yaml` with FRED + IB + CFTC context
+- 12 unit tests validating YAML structure and v3 parsing
+- Strategy loads as StrategyConfigurationV3 with all 3 context_data entries
+
+**Gotchas:**
+- Loader class is `StrategyConfigurationLoader.load_v3_strategy()`, not `StrategyLoaderV3`
+- `IndicatorDefinition` uses `model_extra` for `data_source` — `extra = "allow"` in model config
+- Strategy uses `date_range: {start, end}` format (not `start_date`/`end_date`)
+
+**Next Task Notes (9.5 - Backtest with External Data):**
+- Strategy needs real data: EURUSD and GBPUSD cached, FRED API key configured
+- Backtest: `ktrdr backtest run eurusd_carry_momentum_v1 EURUSD 1h --start-date 2024-01-01 --end-date 2025-01-01`
+- Engine will auto-load context data from model metadata (Task 9.1 work)
