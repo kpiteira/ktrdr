@@ -197,7 +197,13 @@ def impl(
 
     typer.echo(f"Created worktree at {worktree_path}")
 
-    # 7. Claim slot and start containers
+    # 7. Generate .env.sandbox in worktree
+    from ktrdr.cli.kinfra.sandbox import generate_env_file
+
+    worktree_instance_id = worktree_path.name
+    generate_env_file(worktree_path, worktree_instance_id, slot.slot_id)
+
+    # 8. Claim slot and start containers
     try:
         registry.claim_slot(slot.slot_id, worktree_path)
         typer.echo(f"Claimed slot {slot.slot_id} ({slot.profile})")
@@ -209,8 +215,14 @@ def impl(
         typer.echo(f"Started containers (API: http://localhost:{slot.ports['api']})")
 
     except Exception as e:
-        # GAP-7: Release slot, keep worktree
+        # Clean up containers/volumes on failure, then release slot
         typer.secho(f"Error starting sandbox: {e}", fg=typer.colors.RED, err=True)
+        try:
+            from ktrdr.cli.kinfra.slots import stop_slot_containers
+
+            stop_slot_containers(slot, remove_volumes=True)
+        except Exception:
+            pass  # Best-effort cleanup
         registry.release_slot(slot.slot_id)
         typer.secho(
             f"Slot released. Worktree kept at {worktree_path}. "

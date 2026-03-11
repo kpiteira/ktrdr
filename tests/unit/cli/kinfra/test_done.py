@@ -284,7 +284,7 @@ class TestDoneStopsContainers:
         result = runner.invoke(app, ["done", "test-M1"])
 
         assert result.exit_code == 0
-        mock_stop.assert_called_once_with(mock_slot)
+        mock_stop.assert_called_once_with(mock_slot, remove_volumes=True)
 
     @patch("ktrdr.cli.kinfra.done.subprocess.run")
     @patch("ktrdr.cli.kinfra.slots.stop_slot_containers")

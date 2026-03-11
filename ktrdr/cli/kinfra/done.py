@@ -163,10 +163,10 @@ def done(
     slot = registry.get_slot_for_worktree(worktree_path)
 
     if slot:
-        # Stop containers
+        # Stop containers and remove volumes (clean slate for next claim)
         typer.echo(f"Stopping containers for slot {slot.slot_id}...")
         try:
-            stop_slot_containers(slot)
+            stop_slot_containers(slot, remove_volumes=True)
         except subprocess.CalledProcessError as exc:
             typer.secho(
                 f"Warning: Failed to stop containers for slot {slot.slot_id} "

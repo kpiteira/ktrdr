@@ -1573,12 +1573,24 @@ def slots() -> None:
     table.add_column("Claimed By")
     table.add_column("Status")
 
+    orphan_slots = []
+
     for _slot_id, slot in sorted(registry.slots.items(), key=lambda x: int(x[0])):
         # Get claimed worktree name or "-"
-        claimed = slot.claimed_by.name if slot.claimed_by else "-"
+        claimed = "-"
+        is_orphan = False
+        if slot.claimed_by:
+            claimed = slot.claimed_by.name
+            # Check if claimed_by path still exists
+            if not slot.claimed_by.exists():
+                claimed = f"[red]{claimed} (ORPHAN)[/red]"
+                is_orphan = True
+                orphan_slots.append(slot)
 
         # Color-code status
-        if slot.status == "running":
+        if is_orphan:
+            status_display = "[red]stale[/red]"
+        elif slot.status == "running":
             status_display = "[green]running[/green]"
         else:
             status_display = "[dim]stopped[/dim]"
@@ -1592,3 +1604,64 @@ def slots() -> None:
         )
 
     console.print(table)
+
+    # Auto-release orphaned slots
+    if orphan_slots:
+        console.print(
+            f"\n[yellow]Found {len(orphan_slots)} orphaned slot(s) "
+            f"(claimed by deleted worktrees)[/yellow]"
+        )
+        for slot in orphan_slots:
+            registry.release_slot(slot.slot_id)
+            console.print(
+                f"  [green]✓[/green] Released slot {slot.slot_id} "
+                f"(was: {slot.claimed_by.name})"  # type: ignore[union-attr]
+            )
+
+
+@sandbox_app.command()
+def release(
+    slot_id: int = typer.Argument(..., help="Slot number to release (1-6)"),
+    force: bool = typer.Option(
+        False, "--force", "-f", help="Release even if worktree still exists"
+    ),
+) -> None:
+    """Release a sandbox slot manually.
+
+    Use this when a slot is stuck in 'claimed' state after its worktree
+    was removed without using `kinfra done`.
+    """
+    from ktrdr.cli.kinfra.slots import stop_slot_containers
+
+    registry = load_registry()
+    slot_key = str(slot_id)
+
+    if slot_key not in registry.slots:
+        error_console.print(f"[red]Error:[/red] Slot {slot_id} does not exist")
+        raise typer.Exit(1)
+
+    slot = registry.slots[slot_key]
+
+    if slot.claimed_by is None:
+        console.print(f"Slot {slot_id} is already free")
+        return
+
+    # Safety check: warn if worktree still exists
+    if slot.claimed_by.exists() and not force:
+        error_console.print(
+            f"[red]Error:[/red] Slot {slot_id} is claimed by "
+            f"{slot.claimed_by.name} which still exists.\n"
+            f"Use `kinfra done` to properly clean up, or --force to release anyway."
+        )
+        raise typer.Exit(1)
+
+    # Stop any running containers (best-effort)
+    console.print(f"Stopping containers for slot {slot_id}...")
+    try:
+        stop_slot_containers(slot, remove_volumes=True)
+    except Exception:
+        pass  # Best-effort
+
+    claimed_name = slot.claimed_by.name
+    registry.release_slot(slot_id)
+    console.print(f"[green]✓[/green] Released slot {slot_id} (was: {claimed_name})")

@@ -346,7 +346,8 @@ class TestImplRollbackOnDockerFailure:
 
         with patch("ktrdr.cli.kinfra.impl._is_git_repo", return_value=True):
             with patch("ktrdr.cli.kinfra.impl.Path.exists", return_value=False):
-                result = runner.invoke(app, ["impl", "feature/M1"])
+                with patch("ktrdr.cli.kinfra.sandbox.generate_env_file"):
+                    result = runner.invoke(app, ["impl", "feature/M1"])
 
         # Should have released the slot
         mock_registry.release_slot.assert_called_once_with(1)
