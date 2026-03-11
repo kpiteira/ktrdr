@@ -159,13 +159,15 @@ class ContextDataAligner:
         # remove non-leading gaps in multi-column context data.
         first_valid = aligned.first_valid_index()
         if first_valid is not None:
-            aligned = aligned.loc[first_valid:]
+            aligned = aligned.loc[first_valid:]  # type: ignore[misc]
         else:
             # All NaN — return empty
             aligned = aligned.iloc[0:0]
 
         # Restore original timezone if primary had one
         if hasattr(primary_index, "tz") and primary_index.tz is not None:
-            aligned.index = pd.DatetimeIndex(aligned.index).tz_localize(primary_index.tz)
+            aligned.index = pd.DatetimeIndex(aligned.index).tz_localize(
+                primary_index.tz
+            )
 
         return aligned

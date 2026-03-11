@@ -91,9 +91,7 @@ class FredDataProvider(ContextDataProvider):
                 )
                 return errors
         else:
-            errors.append(
-                "FRED provider 'series' must be a string or list of strings"
-            )
+            errors.append("FRED provider 'series' must be a string or list of strings")
             return errors
 
         if not self._settings.has_api_key:
