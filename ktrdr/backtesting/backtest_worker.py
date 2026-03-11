@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any, Optional
 
 from fastapi import FastAPI
 from opentelemetry import trace
+from pydantic import Field
 
 from ktrdr.api.models.operations import OperationMetadata, OperationType
 from ktrdr.api.models.workers import WorkerType
@@ -106,6 +107,7 @@ class BacktestStartRequest(WorkerOperationMixin):
     commission: float = 0.001
     slippage: float = 0.0005  # 0.05%
     model_path: Optional[str] = None  # Explicit model path for v3 models
+    timeframes: list[str] = Field(default_factory=list)
 
 
 class BacktestResumeRequest(WorkerOperationMixin):
@@ -272,6 +274,7 @@ class BacktestWorker(WorkerAPIBase):
             "commission": request.commission,
             "slippage": request.slippage,
             "model_path": request.model_path,
+            "timeframes": request.timeframes,
         }
 
         # 1. Create operation in worker's OperationsService
@@ -311,6 +314,7 @@ class BacktestWorker(WorkerAPIBase):
             initial_capital=request.initial_capital,
             commission=request.commission,
             slippage=request.slippage,
+            timeframes=request.timeframes,
         )
 
         # 4. Build progress bridge
@@ -364,6 +368,7 @@ class BacktestWorker(WorkerAPIBase):
             initial_capital=original_request.get("initial_capital", 100000.0),
             commission=original_request.get("commission", 0.001),
             slippage=original_request.get("slippage", 0.0005),
+            timeframes=original_request.get("timeframes", []),
         )
 
         # 3. Build progress bridge

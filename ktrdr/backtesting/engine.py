@@ -7,7 +7,7 @@ trading use (see DESIGN.md for rationale).
 """
 
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Callable, Optional, cast
 
 import pandas as pd
@@ -42,6 +42,15 @@ class BacktestConfig:
     initial_capital: float = 100000.0
     commission: float = 0.001  # 0.1%
     slippage: float = 0.0005  # 0.05%
+    timeframes: list[str] = field(default_factory=list)
+
+    def get_all_timeframes(self) -> list[str]:
+        """Return all timeframes for this backtest.
+
+        If explicit timeframes list is set, returns it.
+        Otherwise falls back to [self.timeframe] for backward compatibility.
+        """
+        return self.timeframes if self.timeframes else [self.timeframe]
 
 
 @dataclass
@@ -493,6 +502,13 @@ class BacktestingEngine:
     def _load_historical_data(self) -> dict[str, pd.DataFrame]:
         """Load historical data for backtesting from cache.
 
+        Uses config.get_all_timeframes() as the primary source of timeframes.
+        This field is threaded from the API through the service layer, ensuring
+        consistency with the strategy config's training_data.timeframes.
+
+        Falls back to _get_strategy_timeframes() (from model bundle) if config
+        doesn't have explicit timeframes set.
+
         Returns:
             Dict mapping timeframes to OHLCV DataFrames
         """
@@ -500,7 +516,13 @@ class BacktestingEngine:
             span.set_attribute("data.symbol", self.config.symbol)
             span.set_attribute("data.timeframe", self.config.timeframe)
 
-            timeframes = self._get_strategy_timeframes()
+            # Prefer config.get_all_timeframes() (threaded from API) over
+            # strategy config extraction — more reliable for multi-TF models
+            timeframes = self.config.get_all_timeframes()
+            if len(timeframes) <= 1:
+                # Fall back to strategy config if config has only a single timeframe
+                # or none at all (e.g., older callers that don't pass timeframes)
+                timeframes = self._get_strategy_timeframes()
 
             if len(timeframes) >= 2:
                 from ..data.multi_timeframe_coordinator import (
