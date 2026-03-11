@@ -111,6 +111,12 @@ class CftcCotProvider(ContextDataProvider):
         report = config.report
         contract_name = CURRENCY_CONTRACT_MAP.get(report, report)
 
+        # Strip timezone — CFTC data is tz-naive (date-only weekly snapshots)
+        if hasattr(start_date, "tzinfo") and start_date.tzinfo is not None:
+            start_date = start_date.replace(tzinfo=None)
+        if hasattr(end_date, "tzinfo") and end_date.tzinfo is not None:
+            end_date = end_date.replace(tzinfo=None)
+
         # Fetch ALL available COT data (percentile needs 52w+ history before start_date)
         # Use a wider window to allow percentile warm-up
         from datetime import timedelta
