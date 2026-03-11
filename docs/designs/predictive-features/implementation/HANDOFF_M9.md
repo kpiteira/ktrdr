@@ -18,3 +18,17 @@
 - Follow `FredDataProvider` pattern in `fred_provider.py`
 - IB data already cached by `ktrdr data load` — use `DataRepository.load_from_cache()`
 - Provider returns OHLCV DataFrame, `get_source_ids()` returns `[config.symbol]`
+
+## Task 9.2 Complete: IB Context Provider (Cross-Pair)
+
+**What was implemented:**
+- `IbContextProvider` in `ktrdr/data/context/ib_context_provider.py`
+- Delegates to `DataRepository.load_from_cache()` — no new API calls
+- Registered as "ib" in `ContextDataProviderRegistry`
+- Filters data to requested date range, handles tz-aware/naive index
+
+**Next Task Notes (9.3 - CFTC COT Provider):**
+- Follow same pattern: implement `CftcCotProvider`, register as "cftc_cot"
+- Task says use `cot_reports` Python library — check if it's already a dependency
+- Weekly data: provider returns weekly DataFrame, alignment handled by `ContextDataAligner`
+- Compute percentile over rolling 52w and 156w windows
