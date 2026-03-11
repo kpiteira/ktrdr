@@ -53,6 +53,10 @@
 - Class imbalance (91% RANGING) inflates accuracy — a always-RANGING baseline would get ~91%
 - Model saved to `models/regime_classifier_seed/1h_v1` with `output_type: regime_classification`
 
-**Next task notes (4.5):**
-- VALIDATION task — use E2E agent workflow
-- Model exists at `models/regime_classifier_seed/1h_v1` with all artifacts
+## Task 4.5 Complete: Validation
+
+**E2E Test:** `training/regime-classifier` — **PASSED** (8 steps)
+- metadata_v3.json has `output_type: regime_classification`
+- Model final layer: shape [4, 32] — 4 output neurons confirmed
+- Label distribution: all 4 classes present ({0:876, 1:1014, 2:25420, 3:669})
+- Training metrics: 100 epochs, val_accuracy=0.911, training_time=55s
