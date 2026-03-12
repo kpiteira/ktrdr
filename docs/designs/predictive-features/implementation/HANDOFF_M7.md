@@ -73,7 +73,10 @@
 
 ## Task 7.7 Complete: Validation
 
-**E2E Test:** `backtest/ensemble-regime-routed` — PASSED (4 steps, 2.74s execution)
-- Config loads, 3 ModelBundles load with correct output_types, backtest completes with 51 trades
-- Two expected WARNs: data range yields 2358 bars (not 3000+), seed classifier collapses to one regime
-- Both are model/data quality issues, not code bugs — documented in test troubleshooting section
+**E2E Test:** `backtest/ensemble-regime-routed` — PASSED with caveats
+
+Real classifier run: config loads, 3 ModelBundles load, backtest completes with 51 trades. But seed regime classifier is degenerate — 100% RANGING (bias +1.29 vs -0.56 to -0.76 on others). No routing exercised.
+
+Synthetic regime validation (cycling regimes every 100 bars): 4 regimes active, 13 transitions, volatile FLAT works (0 trades), position close on transition works. This proves routing infrastructure is correct.
+
+**Conclusion:** Ensemble plumbing works. Seed regime classifier needs retraining with class balancing to produce real regime diversity.
