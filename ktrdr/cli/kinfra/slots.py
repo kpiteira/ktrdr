@@ -59,9 +59,7 @@ def reset_slot_volumes(slot: SlotInfo) -> None:
         "-v",
     ]
     # Best-effort: if nothing is running, this is a no-op
-    subprocess.run(
-        cmd, cwd=slot.infrastructure_path, capture_output=True, text=True
-    )
+    subprocess.run(cmd, cwd=slot.infrastructure_path, capture_output=True, text=True)
 
 
 def start_slot_containers(slot: SlotInfo, timeout: int = 120) -> None:
@@ -95,7 +93,10 @@ def start_slot_containers(slot: SlotInfo, timeout: int = 120) -> None:
         "-d",
     ]
     result = subprocess.run(
-        cmd, cwd=slot.infrastructure_path, capture_output=True, text=True,
+        cmd,
+        cwd=slot.infrastructure_path,
+        capture_output=True,
+        text=True,
         env=compose_env,
     )
     if result.returncode != 0:

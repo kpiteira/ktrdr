@@ -229,8 +229,8 @@ class TestModelMetadataV3Defaults:
         assert meta.output_type == "classification"
 
 
-class TestModelMetadataV3OutputType:
-    """Test output_type field for model classification."""
+class TestModelMetadataOutputType:
+    """Test output_type field for classification variants."""
 
     def test_default_output_type(self):
         """Default output_type is 'classification'."""
@@ -251,45 +251,62 @@ class TestModelMetadataV3OutputType:
         )
         assert meta.output_type == "context_classification"
 
-    def test_output_type_serialization(self):
-        """output_type is included in to_dict() output."""
+    def test_output_type_regime_classification(self):
+        """output_type can be set to 'regime_classification'."""
         meta = ModelMetadataV3(
-            model_name="test",
-            strategy_name="test",
+            model_name="regime_model",
+            strategy_name="regime_strategy",
             resolved_features=[],
-            output_type="context_classification",
+            output_type="regime_classification",
         )
-        data = meta.to_dict()
-        assert data["output_type"] == "context_classification"
+        assert meta.output_type == "regime_classification"
 
-    def test_output_type_deserialization(self):
-        """output_type is restored from from_dict()."""
-        data = {
-            "model_name": "test",
-            "strategy_name": "test",
-            "resolved_features": [],
-            "output_type": "context_classification",
-        }
-        meta = ModelMetadataV3.from_dict(data)
-        assert meta.output_type == "context_classification"
+    def test_output_type_regression(self):
+        """output_type can be set to 'regression'."""
+        meta = ModelMetadataV3(
+            model_name="reg_model",
+            strategy_name="reg_strategy",
+            resolved_features=[],
+            output_type="regression",
+        )
+        assert meta.output_type == "regression"
 
-    def test_output_type_default_on_deserialization(self):
-        """Missing output_type in dict defaults to 'classification'."""
+    def test_serialization_roundtrip_preserves_output_type(self):
+        """Serialization roundtrip preserves output_type."""
+        for output_type in (
+            "context_classification",
+            "regime_classification",
+            "regression",
+        ):
+            meta = ModelMetadataV3(
+                model_name="test",
+                strategy_name="test",
+                resolved_features=[],
+                output_type=output_type,
+            )
+            d = meta.to_dict()
+            assert d["output_type"] == output_type
+
+            restored = ModelMetadataV3.from_dict(d)
+            assert restored.output_type == output_type
+
+    def test_existing_metadata_without_output_type_defaults(self):
+        """Existing metadata without output_type deserializes with default 'classification'."""
         data = {
-            "model_name": "test",
-            "strategy_name": "test",
-            "resolved_features": [],
+            "model_name": "old_model",
+            "strategy_name": "old_strategy",
+            "resolved_features": ["feat1"],
         }
         meta = ModelMetadataV3.from_dict(data)
         assert meta.output_type == "classification"
 
-    def test_output_type_roundtrip(self):
-        """output_type survives to_dict() -> from_dict() round-trip."""
-        original = ModelMetadataV3(
-            model_name="ctx",
-            strategy_name="ctx_strat",
-            resolved_features=["feat1"],
-            output_type="context_classification",
+    def test_to_dict_includes_output_type(self):
+        """to_dict includes output_type in serialized dict."""
+        meta = ModelMetadataV3(
+            model_name="test",
+            strategy_name="test",
+            resolved_features=[],
         )
-        restored = ModelMetadataV3.from_dict(original.to_dict())
-        assert restored.output_type == original.output_type
+        d = meta.to_dict()
+        assert "output_type" in d
+        assert d["output_type"] == "classification"

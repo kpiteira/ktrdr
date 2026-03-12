@@ -776,6 +776,16 @@ class HostTrainingOrchestrator:
                     "bullish_threshold": labels_config.get("bullish_threshold", 0.005),
                     "bearish_threshold": labels_config.get("bearish_threshold", -0.005),
                 }
+            elif label_source == "regime":
+                label_config = {
+                    "source": "regime",
+                    "horizon": labels_config.get("horizon", 24),
+                    "trending_threshold": labels_config.get("trending_threshold", 0.5),
+                    "vol_crisis_threshold": labels_config.get(
+                        "vol_crisis_threshold", 2.0
+                    ),
+                    "vol_lookback": labels_config.get("vol_lookback", 120),
+                }
             else:
                 label_config = {
                     "zigzag_threshold": labels_config.get("zigzag_threshold", 0.02),
@@ -785,11 +795,18 @@ class HostTrainingOrchestrator:
             labels = TrainingPipeline.create_labels(price_data, label_config)
 
             # Align features and labels
-            # For forward_return labels: labels are shorter (last `horizon` bars dropped),
-            # so truncate features from the front to match
-            if label_source in ("forward_return", "context") and len(labels) < len(
-                features
-            ):
+            if label_source == "regime" and len(labels) < len(features):
+                # Regime labels drop leading vol_lookback AND trailing horizon bars.
+                vol_lookback = labels_config.get("vol_lookback", 120)
+                logger.info(
+                    f"Aligned features from {len(features)} to {len(labels)} "
+                    f"for regime labels (vol_lookback={vol_lookback}, "
+                    f"horizon={labels_config.get('horizon', 24)})"
+                )
+                features = features[vol_lookback : vol_lookback + len(labels)]
+            elif label_source in ("forward_return", "context") and len(
+                labels
+            ) < len(features):
                 logger.info(
                     f"Truncated features from {len(features)} to {len(labels)} "
                     f"to match {label_source} labels (horizon={label_config.get('horizon', 'N/A')})"
@@ -859,7 +876,12 @@ class HostTrainingOrchestrator:
                     f"Unsupported output_format '{output_format}'. "
                     "Must be 'classification' or 'regression'."
                 )
-            output_dim = 1 if output_format == "regression" else 3
+            if output_format == "regression":
+                output_dim = 1
+            elif label_source == "regime":
+                output_dim = 4  # 4-class regime classification
+            else:
+                output_dim = 3  # standard 3-class (BUY/SELL/HOLD)
 
             model_config = strategy_config.get("model", {})
             # Inject output_format so MLPTradingModel builds the right architecture
@@ -1084,17 +1106,13 @@ class HostTrainingOrchestrator:
         label_source = (
             config.get("training", {}).get("labels", {}).get("source", "zigzag")
         )
-        output_format = config.get("decisions", {}).get(
-            "output_format", "classification"
-        )
-        if label_source == "context":
-            output_type = "context_classification"
-        elif label_source == "regime":
-            output_type = "regime_classification"
-        elif output_format == "regression":
-            output_type = "regression"
-        else:
-            output_type = "classification"
+        output_type_map = {
+            "zigzag": "classification",
+            "forward_return": "regression",
+            "context": "context_classification",
+            "regime": "regime_classification",
+        }
+        output_type = output_type_map.get(label_source, "classification")
 
         metadata = ModelMetadataV3(
             model_name=config.get("name", "unknown"),
