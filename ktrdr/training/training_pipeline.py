@@ -487,8 +487,12 @@ class TrainingPipeline:
                 vol_lookback=vol_lookback,
             )
             labels = regime_labeler.generate_labels(tf_price_data)
-            # Drop NaN labels (last `horizon` bars have no future data)
-            valid_labels = labels.dropna()
+            # Drop NaN labels: first vol_lookback bars (no RV baseline) and
+            # last horizon bars (no future data) are NaN.
+            # Use deterministic slicing for correct feature alignment.
+            start_idx = vol_lookback
+            end_idx = max(len(tf_price_data) - horizon, start_idx)
+            valid_labels = labels.iloc[start_idx:end_idx]
             label_tensor = torch.LongTensor(valid_labels.values.astype(int))
 
             unique, counts = torch.unique(label_tensor, return_counts=True)
