@@ -285,7 +285,7 @@ class LocalTrainingOrchestrator:
             # Features must be sliced from the same start offset.
             vol_lookback = labels_config.get("vol_lookback", 120)
             truncated_from = len(features)
-            features = features[vol_lookback : vol_lookback + len(labels)]
+            features = features[vol_lookback : vol_lookback + len(labels)]  # type: ignore[assignment]
             logger.info(
                 f"Aligned features from {truncated_from} to {len(features)} "
                 f"for regime labels (vol_lookback={vol_lookback}, "
@@ -294,7 +294,7 @@ class LocalTrainingOrchestrator:
         elif label_source == "forward_return" and len(labels) < len(features):
             # Forward return labels only drop trailing horizon bars.
             truncated_from = len(features)
-            features = features[: len(labels)]
+            features = features[: len(labels)]  # type: ignore[assignment]
             logger.info(
                 f"Truncated features from {truncated_from} to {len(features)} "
                 f"to match forward_return labels (horizon={labels_config.get('horizon', 20)})"
