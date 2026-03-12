@@ -38,10 +38,7 @@ CURRENCY_CONTRACT_MAP: dict[str, str] = {
 
 VALID_CURRENCY_CODES = set(CURRENCY_CONTRACT_MAP.keys())
 
-# CFTC TFF report URLs
-# Weekly file (current week only, no headers)
-CFTC_TFF_CURRENT_URL = "https://www.cftc.gov/dea/newcot/FinFutWk.txt"
-# Annual files (full year history, with headers)
+# CFTC TFF annual report URL (full year history, with headers)
 CFTC_TFF_ANNUAL_URL = "https://www.cftc.gov/files/dea/history/fut_fin_txt_{year}.zip"
 
 
@@ -264,14 +261,12 @@ class CftcCotProvider(ContextDataProvider):
         have headers; weekly file does not (handled by parser).
         """
         frames: list[pd.DataFrame] = []
-        start_year = start_date.year
         # Need 3+ years back for 156-week percentile window
-        fetch_from_year = max(start_year - 4, 2017)
-        current_year = datetime.now().year
+        fetch_from_year = max(start_date.year - 4, 2017)
+        max_fetch_year = min(datetime.now().year, end_date.year)
 
         async with httpx.AsyncClient(timeout=120.0) as client:
-            # Fetch annual files for history
-            for year in range(fetch_from_year, current_year + 1):
+            for year in range(fetch_from_year, max_fetch_year + 1):
                 url = CFTC_TFF_ANNUAL_URL.format(year=year)
                 try:
                     response = await client.get(url)
@@ -286,31 +281,11 @@ class CftcCotProvider(ContextDataProvider):
                 except Exception as e:
                     logger.warning(f"Failed to fetch CFTC TFF for {year}: {e}")
 
-            # Also fetch current weekly file for most recent data
-            try:
-                response = await client.get(CFTC_TFF_CURRENT_URL)
-                if response.status_code == 200:
-                    # Weekly file has no headers — read with header=None
-                    df = pd.read_csv(StringIO(response.text), header=None)
-                    frames.append(df)
-                    logger.debug(f"Loaded CFTC TFF current week: {len(df)} rows")
-            except Exception as e:
-                logger.warning(f"Failed to fetch current CFTC TFF: {e}")
-
         if not frames:
             return ""
 
-        # Combine all frames — handle mixed formats (with/without headers)
-        # Annual files have named columns; weekly file has integer columns
-        # Return the raw text of annual data only (has headers for parser)
-        # Weekly data is too different to merge easily
-        header_frames = [f for f in frames if isinstance(f.columns[0], str)]
-        if header_frames:
-            combined = pd.concat(header_frames, ignore_index=True)
-            return combined.to_csv(index=False)
-
-        # Fallback: return empty
-        return ""
+        combined = pd.concat(frames, ignore_index=True)
+        return combined.to_csv(index=False)
 
     def _parse_tff_report(self, raw_text: str, contract_name: str) -> pd.DataFrame:
         """Parse TFF report text, extract positioning for target contract.

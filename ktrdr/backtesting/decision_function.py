@@ -12,6 +12,7 @@ trading use. See DESIGN.md for the full rationale.
 from __future__ import annotations
 
 import logging
+import math
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -119,8 +120,6 @@ class DecisionFunction:
         confidence = nn_output["confidence"]
 
         # Guard against NaN/inf from degenerate model output
-        import math
-
         if math.isnan(confidence) or math.isinf(confidence):
             logger.debug(f"NaN/inf confidence at {timestamp}, defaulting to HOLD")
             return TradingDecision(

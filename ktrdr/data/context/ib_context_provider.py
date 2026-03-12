@@ -108,6 +108,12 @@ class IbContextProvider(ContextDataProvider):
                 end_ts = end_ts.tz_localize("UTC")
         data = data[(data.index >= start_ts) & (data.index <= end_ts)]
 
+        if data.empty:
+            raise RuntimeError(
+                f"No IB data for '{symbol}' ({timeframe}) in range "
+                f"{start_date} to {end_date}"
+            )
+
         logger.info(
             f"IB context '{symbol}' ({timeframe}): {len(data)} bars "
             f"({data.index[0]} to {data.index[-1]})"
