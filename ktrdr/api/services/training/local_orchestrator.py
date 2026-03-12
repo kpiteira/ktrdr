@@ -262,6 +262,14 @@ class LocalTrainingOrchestrator:
                 "source": "forward_return",
                 "horizon": labels_config.get("horizon", 20),
             }
+        elif label_source == "regime":
+            label_config = {
+                "source": "regime",
+                "horizon": labels_config.get("horizon", 24),
+                "trending_threshold": labels_config.get("trending_threshold", 0.5),
+                "vol_crisis_threshold": labels_config.get("vol_crisis_threshold", 2.0),
+                "vol_lookback": labels_config.get("vol_lookback", 120),
+            }
         else:
             label_config = {
                 "source": "zigzag",
@@ -272,14 +280,24 @@ class LocalTrainingOrchestrator:
         labels = TrainingPipeline.create_labels(price_data, label_config)
 
         # Align features and labels
-        # For forward_return labels: labels are shorter (last `horizon` bars dropped),
-        # so truncate features from the front to match
-        if label_source == "forward_return" and len(labels) < len(features):
+        if label_source == "regime" and len(labels) < len(features):
+            # Regime labels drop leading vol_lookback AND trailing horizon bars.
+            # Features must be sliced from the same start offset.
+            vol_lookback = labels_config.get("vol_lookback", 120)
+            truncated_from = len(features)
+            features = features[vol_lookback : vol_lookback + len(labels)]  # type: ignore[assignment]
+            logger.info(
+                f"Aligned features from {truncated_from} to {len(features)} "
+                f"for regime labels (vol_lookback={vol_lookback}, "
+                f"horizon={labels_config.get('horizon', 24)})"
+            )
+        elif label_source == "forward_return" and len(labels) < len(features):
+            # Forward return labels only drop trailing horizon bars.
             truncated_from = len(features)
             features = features[: len(labels)]  # type: ignore[assignment]
             logger.info(
                 f"Truncated features from {truncated_from} to {len(features)} "
-                f"to match forward return labels (horizon={labels_config.get('horizon', 20)})"
+                f"to match forward_return labels (horizon={labels_config.get('horizon', 20)})"
             )
 
         min_len = min(len(features), len(labels))
@@ -319,7 +337,15 @@ class LocalTrainingOrchestrator:
         # Create model
         decisions_config = config.get("decisions", {})
         output_format = decisions_config.get("output_format", "classification")
-        output_dim = 1 if output_format == "regression" else 3
+        label_source = (
+            config.get("training", {}).get("labels", {}).get("source", "zigzag")
+        )
+        if output_format == "regression":
+            output_dim = 1
+        elif label_source == "regime":
+            output_dim = 4  # 4-class regime classification
+        else:
+            output_dim = 3  # standard 3-class (BUY/SELL/HOLD)
 
         model_config = config.get("model", {})
         # Inject output_format so MLPTradingModel builds the right architecture
@@ -691,6 +717,15 @@ class LocalTrainingOrchestrator:
             except Exception as e:
                 logger.warning(f"Could not resolve context source IDs: {e}")
 
+        # Determine output_type from label source
+        label_src = config.get("training", {}).get("labels", {}).get("source", "zigzag")
+        output_type_map = {
+            "zigzag": "classification",
+            "forward_return": "regression",
+            "regime": "regime_classification",
+        }
+        output_type = output_type_map.get(label_src, "classification")
+
         # Create metadata
         metadata = ModelMetadataV3(
             model_name=config.get("name", "unknown"),
@@ -703,6 +738,7 @@ class LocalTrainingOrchestrator:
             training_symbols=training_symbols,
             training_timeframes=training_timeframes,
             training_metrics=training_metrics,
+            output_type=output_type,
             context_data_config=context_data_config,
             context_source_ids=context_source_ids,
         )

@@ -32,9 +32,7 @@ class TestBacktestingServiceTimeframes:
         return svc
 
     @pytest.mark.asyncio
-    async def test_run_backtest_includes_timeframes_in_payload(
-        self, service
-    ) -> None:
+    async def test_run_backtest_includes_timeframes_in_payload(self, service) -> None:
         """Service includes timeframes in worker request payload."""
         captured_payload = {}
 
@@ -51,7 +49,11 @@ class TestBacktestingServiceTimeframes:
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
         with patch("httpx.AsyncClient", return_value=mock_client):
-            with patch.object(service.operations_service, "generate_operation_id", return_value="op-backend-1"):
+            with patch.object(
+                service.operations_service,
+                "generate_operation_id",
+                return_value="op-backend-1",
+            ):
                 with patch.object(service.operations_service, "register_remote_proxy"):
                     await service.run_backtest(
                         symbol="EURUSD",
@@ -67,9 +69,7 @@ class TestBacktestingServiceTimeframes:
         assert captured_payload["timeframes"] == ["1h", "1d"]
 
     @pytest.mark.asyncio
-    async def test_run_backtest_default_empty_timeframes(
-        self, service
-    ) -> None:
+    async def test_run_backtest_default_empty_timeframes(self, service) -> None:
         """Service sends empty timeframes list when none provided."""
         captured_payload = {}
 
@@ -86,7 +86,11 @@ class TestBacktestingServiceTimeframes:
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
         with patch("httpx.AsyncClient", return_value=mock_client):
-            with patch.object(service.operations_service, "generate_operation_id", return_value="op-backend-1"):
+            with patch.object(
+                service.operations_service,
+                "generate_operation_id",
+                return_value="op-backend-1",
+            ):
                 with patch.object(service.operations_service, "register_remote_proxy"):
                     await service.run_backtest(
                         symbol="EURUSD",

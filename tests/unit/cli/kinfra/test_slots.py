@@ -14,12 +14,19 @@ class TestStartSlotContainersCommand:
     """Tests that start_slot_containers builds correct docker command."""
 
     @patch("ktrdr.cli.kinfra.slots._wait_for_health")
-    @patch("ktrdr.cli.kinfra.slots._build_compose_env", return_value={"KTRDR_ENV": "development"})
+    @patch(
+        "ktrdr.cli.kinfra.slots._build_compose_env",
+        return_value={"KTRDR_ENV": "development"},
+    )
     @patch("ktrdr.cli.kinfra.slots.reset_slot_volumes")
     @patch("ktrdr.cli.kinfra.slots.subprocess.run")
     def test_start_command_correct(
-        self, mock_run: MagicMock, mock_reset: MagicMock,
-        mock_env: MagicMock, mock_health: MagicMock, tmp_path: Path
+        self,
+        mock_run: MagicMock,
+        mock_reset: MagicMock,
+        mock_env: MagicMock,
+        mock_health: MagicMock,
+        tmp_path: Path,
     ) -> None:
         """start_slot_containers should build correct docker compose command."""
         from ktrdr.cli.kinfra.slots import start_slot_containers
@@ -62,8 +69,12 @@ class TestStartSlotContainersCommand:
     @patch("ktrdr.cli.kinfra.slots.reset_slot_volumes")
     @patch("ktrdr.cli.kinfra.slots.subprocess.run")
     def test_start_includes_env_file(
-        self, mock_run: MagicMock, mock_reset: MagicMock,
-        mock_env: MagicMock, mock_health: MagicMock, tmp_path: Path
+        self,
+        mock_run: MagicMock,
+        mock_reset: MagicMock,
+        mock_env: MagicMock,
+        mock_health: MagicMock,
+        tmp_path: Path,
     ) -> None:
         """start_slot_containers should include --env-file .env.sandbox."""
         from ktrdr.cli.kinfra.slots import start_slot_containers
@@ -87,8 +98,12 @@ class TestStartSlotContainersCommand:
     @patch("ktrdr.cli.kinfra.slots._wait_for_health")
     @patch("ktrdr.cli.kinfra.slots.subprocess.run")
     def test_start_raises_on_failure(
-        self, mock_run: MagicMock, mock_health: MagicMock,
-        mock_reset: MagicMock, mock_env: MagicMock, tmp_path: Path
+        self,
+        mock_run: MagicMock,
+        mock_health: MagicMock,
+        mock_reset: MagicMock,
+        mock_env: MagicMock,
+        tmp_path: Path,
     ) -> None:
         """start_slot_containers should raise RuntimeError on docker failure."""
         from ktrdr.cli.kinfra.slots import start_slot_containers
@@ -108,8 +123,12 @@ class TestStartSlotContainersCommand:
     @patch("ktrdr.cli.kinfra.slots.reset_slot_volumes")
     @patch("ktrdr.cli.kinfra.slots.subprocess.run")
     def test_start_calls_health_check(
-        self, mock_run: MagicMock, mock_reset: MagicMock,
-        mock_env: MagicMock, mock_health: MagicMock, tmp_path: Path
+        self,
+        mock_run: MagicMock,
+        mock_reset: MagicMock,
+        mock_env: MagicMock,
+        mock_health: MagicMock,
+        tmp_path: Path,
     ) -> None:
         """start_slot_containers should wait for health check after start."""
         from ktrdr.cli.kinfra.slots import start_slot_containers
@@ -150,7 +169,9 @@ class TestStopSlotContainersCommand:
         assert call_args.kwargs["cwd"] == tmp_path
 
     @patch("ktrdr.cli.kinfra.slots.subprocess.run")
-    def test_stop_with_remove_volumes(self, mock_run: MagicMock, tmp_path: Path) -> None:
+    def test_stop_with_remove_volumes(
+        self, mock_run: MagicMock, tmp_path: Path
+    ) -> None:
         """stop_slot_containers with remove_volumes should pass -v flag."""
         from ktrdr.cli.kinfra.slots import stop_slot_containers
         from ktrdr.cli.sandbox_registry import SlotInfo

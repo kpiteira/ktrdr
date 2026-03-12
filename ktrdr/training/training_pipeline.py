@@ -415,18 +415,19 @@ class TrainingPipeline:
         price_data: dict[str, pd.DataFrame], label_config: dict[str, Any]
     ) -> torch.Tensor:
         """
-        Generate training labels with support for ZigZag (classification) and
-        forward return (regression) modes.
+        Generate training labels with support for ZigZag (classification),
+        forward return (regression), and regime (4-class classification) modes.
 
         Args:
             price_data: Dictionary mapping timeframes to OHLCV data
             label_config: Label generation configuration. Key fields:
-                - source: "zigzag" (default) or "forward_return"
+                - source: "zigzag" (default), "forward_return", or "regime"
                 - For zigzag: zigzag_threshold, label_lookahead
                 - For forward_return: horizon (int)
+                - For regime: horizon, trending_threshold, vol_crisis_threshold, vol_lookback
 
         Returns:
-            Tensor of labels (LongTensor for zigzag, FloatTensor for forward_return)
+            Tensor of labels (LongTensor for zigzag/regime, FloatTensor for forward_return)
         """
         source = label_config.get("source", "zigzag")
 
@@ -465,6 +466,47 @@ class TrainingPipeline:
                 f"positive={stats['pct_positive']:.1f}%, negative={stats['pct_negative']:.1f}%"
             )
             return label_tensor
+
+        if source == "regime":
+            from ktrdr.training.regime_labeler import RegimeLabeler
+
+            horizon = label_config.get("horizon", 24)
+            trending_threshold = label_config.get("trending_threshold", 0.5)
+            vol_crisis_threshold = label_config.get("vol_crisis_threshold", 2.0)
+            vol_lookback = label_config.get("vol_lookback", 120)
+            logger.info(
+                f"TrainingPipeline.create_labels() - Regime labels "
+                f"(horizon={horizon}, trending_threshold={trending_threshold}, "
+                f"vol_crisis_threshold={vol_crisis_threshold}, vol_lookback={vol_lookback}, "
+                f"bars={len(tf_price_data)})"
+            )
+            regime_labeler = RegimeLabeler(
+                horizon=horizon,
+                trending_threshold=trending_threshold,
+                vol_crisis_threshold=vol_crisis_threshold,
+                vol_lookback=vol_lookback,
+            )
+            labels = regime_labeler.generate_labels(tf_price_data)
+            # Drop NaN labels: first vol_lookback bars (no RV baseline) and
+            # last horizon bars (no future data) are NaN.
+            # Use deterministic slicing for correct feature alignment.
+            start_idx = vol_lookback
+            end_idx = max(len(tf_price_data) - horizon, start_idx)
+            valid_labels = labels.iloc[start_idx:end_idx]
+            label_tensor = torch.LongTensor(valid_labels.values.astype(int))
+
+            unique, counts = torch.unique(label_tensor, return_counts=True)
+            dist = {int(u): int(c) for u, c in zip(unique, counts)}
+            logger.info(
+                f"Generated {len(label_tensor)} regime labels - Distribution: {dist}"
+            )
+            return label_tensor
+
+        if source != "zigzag":
+            raise ValueError(
+                f"Unknown label source '{source}'. "
+                f"Supported sources: 'zigzag', 'forward_return', 'regime'"
+            )
 
         # Default: ZigZag classification labels
         logger.info(
@@ -557,7 +599,9 @@ class TrainingPipeline:
 
         if model_type == "mlp":
             # Create MLPTradingModel and build the model
-            mlp_model = MLPTradingModel(model_config)
+            # Inject num_classes so MLP knows the output dimension
+            model_config_with_classes = {**model_config, "num_classes": output_dim}
+            mlp_model = MLPTradingModel(model_config_with_classes)
             model = mlp_model.build_model(input_dim)
             logger.info(
                 f"✅ Created MLP model with hidden_layers={model_config.get('hidden_layers', [])}"
@@ -1022,8 +1066,7 @@ class TrainingPipelineV3:
         result = result[available_expected]
 
         logger.info(
-            f"Features prepared: {result.shape[0]} samples, "
-            f"{result.shape[1]} features"
+            f"Features prepared: {result.shape[0]} samples, {result.shape[1]} features"
         )
 
         return result

@@ -226,3 +226,73 @@ class TestModelMetadataV3Defaults:
         assert meta.training_symbols == []
         assert meta.training_timeframes == []
         assert meta.training_metrics == {}
+        assert meta.output_type == "classification"
+
+
+class TestModelMetadataOutputType:
+    """Test output_type field for regime classification support."""
+
+    def test_default_output_type_is_classification(self):
+        """Default output_type is 'classification' for backward compatibility."""
+        meta = ModelMetadataV3(
+            model_name="test",
+            strategy_name="test",
+            resolved_features=[],
+        )
+        assert meta.output_type == "classification"
+
+    def test_output_type_regime_classification(self):
+        """output_type can be set to 'regime_classification'."""
+        meta = ModelMetadataV3(
+            model_name="regime_model",
+            strategy_name="regime_strategy",
+            resolved_features=[],
+            output_type="regime_classification",
+        )
+        assert meta.output_type == "regime_classification"
+
+    def test_output_type_regression(self):
+        """output_type can be set to 'regression'."""
+        meta = ModelMetadataV3(
+            model_name="reg_model",
+            strategy_name="reg_strategy",
+            resolved_features=[],
+            output_type="regression",
+        )
+        assert meta.output_type == "regression"
+
+    def test_serialization_roundtrip_preserves_output_type(self):
+        """Serialization roundtrip preserves output_type."""
+        meta = ModelMetadataV3(
+            model_name="test",
+            strategy_name="test",
+            resolved_features=[],
+            output_type="regime_classification",
+        )
+        d = meta.to_dict()
+        assert d["output_type"] == "regime_classification"
+
+        restored = ModelMetadataV3.from_dict(d)
+        assert restored.output_type == "regime_classification"
+
+    def test_existing_metadata_without_output_type_defaults(self):
+        """Existing metadata without output_type deserializes with default 'classification'."""
+        data = {
+            "model_name": "old_model",
+            "strategy_name": "old_strategy",
+            "resolved_features": ["feat1"],
+            # No output_type field — simulates old metadata
+        }
+        meta = ModelMetadataV3.from_dict(data)
+        assert meta.output_type == "classification"
+
+    def test_to_dict_includes_output_type(self):
+        """to_dict includes output_type in serialized dict."""
+        meta = ModelMetadataV3(
+            model_name="test",
+            strategy_name="test",
+            resolved_features=[],
+        )
+        d = meta.to_dict()
+        assert "output_type" in d
+        assert d["output_type"] == "classification"
