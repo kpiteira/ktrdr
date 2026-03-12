@@ -56,3 +56,17 @@
 **Next task notes (7.6):**
 - Task 7.6 is MIXED — requires training per-regime models, creating ensemble config YAML, running `ktrdr ensemble backtest`, comparing vs baseline.
 - CLI command is fully wired; test with a real ensemble YAML config.
+
+## Task 7.6 Complete: Run Full Regime-Routed Backtest
+
+**Gotchas:**
+- `ModelBundle.load()` hardcoded `num_classes=3`. Regime models have 4 classes → size mismatch loading state_dict. Fixed by inferring `num_classes` from `metadata.output_type` via `_CLASS_NAMES`.
+- `DataRepository` has `load_from_cache()`, not `load_historical_data()`. EnsembleBacktestRunner updated.
+- CLI runs locally (no torch). Ensemble backtest must run inside container via `docker exec`.
+
+**Results:**
+- Ensemble: 1348 bars, 24 trades, 0 transitions (seed regime classifier classifies everything as "ranging")
+- Baseline (same signal model, no routing): identical 24 trades — expected since only one regime active
+- Ensemble overhead: 2.5s vs 0.86s baseline (3x, due to loading 3 models + routing per bar)
+- Transition costs: $0 (no transitions)
+- Conclusion: Infrastructure works end-to-end. Real regime differentiation requires better-trained regime classifier.
