@@ -291,7 +291,7 @@ class LocalTrainingOrchestrator:
             # Regime labels drop leading vol_lookback AND trailing horizon bars.
             vol_lookback = labels_config.get("vol_lookback", 120)
             truncated_from = len(features)
-            features = features[vol_lookback : vol_lookback + len(labels)]
+            features = features[vol_lookback : vol_lookback + len(labels)]  # type: ignore[assignment]
             logger.info(
                 f"Aligned features from {truncated_from} to {len(features)} "
                 f"for regime labels (vol_lookback={vol_lookback}, "
@@ -301,7 +301,7 @@ class LocalTrainingOrchestrator:
             features
         ):
             truncated_from = len(features)
-            features = features[: len(labels)]
+            features = features[: len(labels)]  # type: ignore[assignment]
             logger.info(
                 f"Truncated features from {truncated_from} to {len(features)} "
                 f"to match {label_source} labels (horizon={label_config.get('horizon', 'N/A')})"
