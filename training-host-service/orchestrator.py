@@ -769,6 +769,13 @@ class HostTrainingOrchestrator:
                     "source": "forward_return",
                     "horizon": labels_config.get("horizon", 20),
                 }
+            elif label_source == "context":
+                label_config = {
+                    "source": "context",
+                    "horizon": labels_config.get("horizon", 5),
+                    "bullish_threshold": labels_config.get("bullish_threshold", 0.005),
+                    "bearish_threshold": labels_config.get("bearish_threshold", -0.005),
+                }
             elif label_source == "regime":
                 label_config = {
                     "source": "regime",
@@ -797,10 +804,12 @@ class HostTrainingOrchestrator:
                     f"horizon={labels_config.get('horizon', 24)})"
                 )
                 features = features[vol_lookback : vol_lookback + len(labels)]
-            elif label_source == "forward_return" and len(labels) < len(features):
+            elif label_source in ("forward_return", "context") and len(
+                labels
+            ) < len(features):
                 logger.info(
                     f"Truncated features from {len(features)} to {len(labels)} "
-                    f"to match forward_return labels (horizon={labels_config.get('horizon', 20)})"
+                    f"to match {label_source} labels (horizon={label_config.get('horizon', 'N/A')})"
                 )
                 features = features[: len(labels)]
 
@@ -1094,10 +1103,13 @@ class HostTrainingOrchestrator:
                 logger.warning(f"Could not resolve context source IDs: {e}")
 
         # Determine output_type from label source
-        label_source = config.get("training", {}).get("labels", {}).get("source", "zigzag")
+        label_source = (
+            config.get("training", {}).get("labels", {}).get("source", "zigzag")
+        )
         output_type_map = {
             "zigzag": "classification",
             "forward_return": "regression",
+            "context": "context_classification",
             "regime": "regime_classification",
         }
         output_type = output_type_map.get(label_source, "classification")

@@ -416,18 +416,24 @@ class TrainingPipeline:
     ) -> torch.Tensor:
         """
         Generate training labels with support for ZigZag (classification),
-        forward return (regression), and regime (4-class classification) modes.
+        forward return (regression), context (3-class classification),
+        and regime (4-class classification) modes.
 
         Args:
             price_data: Dictionary mapping timeframes to OHLCV data
             label_config: Label generation configuration. Key fields:
-                - source: "zigzag" (default), "forward_return", or "regime"
+                - source: "zigzag" (default), "forward_return", "context", or "regime"
                 - For zigzag: zigzag_threshold, label_lookahead
                 - For forward_return: horizon (int)
+                - For context: horizon, bullish_threshold, bearish_threshold
                 - For regime: horizon, trending_threshold, vol_crisis_threshold, vol_lookback
 
         Returns:
-            Tensor of labels (LongTensor for zigzag/regime, FloatTensor for forward_return)
+            Tensor of labels:
+                - LongTensor for zigzag (BUY=0, SELL=1, HOLD=2)
+                - FloatTensor for forward_return (continuous)
+                - LongTensor for context (BULLISH=0, BEARISH=1, NEUTRAL=2)
+                - LongTensor for regime (4-class)
         """
         source = label_config.get("source", "zigzag")
 
@@ -464,6 +470,34 @@ class TrainingPipeline:
                 f"Generated {len(label_tensor)} forward return labels - "
                 f"mean={stats['mean']:.6f}, std={stats['std']:.6f}, "
                 f"positive={stats['pct_positive']:.1f}%, negative={stats['pct_negative']:.1f}%"
+            )
+            return label_tensor
+
+        if source == "context":
+            from ktrdr.training.context_labeler import ContextLabeler
+
+            horizon = label_config.get("horizon", 5)
+            bullish_threshold = label_config.get("bullish_threshold", 0.005)
+            bearish_threshold = label_config.get("bearish_threshold", -0.005)
+            logger.info(
+                f"TrainingPipeline.create_labels() - Context labels "
+                f"(horizon={horizon}, bullish={bullish_threshold}, "
+                f"bearish={bearish_threshold}, bars={len(tf_price_data)})"
+            )
+            ctx_labeler = ContextLabeler(
+                horizon=horizon,
+                bullish_threshold=bullish_threshold,
+                bearish_threshold=bearish_threshold,
+            )
+            labels = ctx_labeler.label(tf_price_data)
+            # Drop trailing NaN bars (last `horizon` bars have no future data)
+            valid_labels = labels.dropna()
+            label_tensor = torch.LongTensor(valid_labels.values.astype(int))
+
+            unique, counts = torch.unique(label_tensor, return_counts=True)
+            dist = {int(u): int(c) for u, c in zip(unique, counts)}
+            logger.info(
+                f"Generated {len(label_tensor)} context labels - Distribution: {dist}"
             )
             return label_tensor
 
@@ -505,7 +539,7 @@ class TrainingPipeline:
         if source != "zigzag":
             raise ValueError(
                 f"Unknown label source '{source}'. "
-                f"Supported sources: 'zigzag', 'forward_return', 'regime'"
+                f"Supported sources: 'zigzag', 'forward_return', 'context', 'regime'"
             )
 
         # Default: ZigZag classification labels

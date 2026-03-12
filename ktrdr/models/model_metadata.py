@@ -37,6 +37,8 @@ class ModelMetadata:
         training_symbols: Symbols used during training
         training_timeframes: Timeframes used during training
         training_metrics: Training metrics (loss, accuracy, etc.)
+        output_type: What the model predicts — "classification" (default/zigzag),
+            "regression", "context_classification", or "regime_classification"
     """
 
     # Identity
@@ -60,8 +62,8 @@ class ModelMetadata:
     training_timeframes: list[str] = field(default_factory=list)
     training_metrics: dict[str, float] = field(default_factory=dict)
 
-    # Output type: "classification" (default, zigzag), "regression" (forward_return),
-    # "regime_classification" (regime 4-class). Default ensures backward compatibility.
+    # Output type: identifies what the model predicts
+    # "classification" (default/zigzag), "regression", "context_classification", "regime_classification"
     output_type: str = "classification"
 
     # Context data (external data like FRED yields)

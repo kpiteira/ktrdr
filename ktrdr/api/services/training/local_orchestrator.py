@@ -262,6 +262,13 @@ class LocalTrainingOrchestrator:
                 "source": "forward_return",
                 "horizon": labels_config.get("horizon", 20),
             }
+        elif label_source == "context":
+            label_config = {
+                "source": "context",
+                "horizon": labels_config.get("horizon", 5),
+                "bullish_threshold": labels_config.get("bullish_threshold", 0.005),
+                "bearish_threshold": labels_config.get("bearish_threshold", -0.005),
+            }
         elif label_source == "regime":
             label_config = {
                 "source": "regime",
@@ -282,7 +289,6 @@ class LocalTrainingOrchestrator:
         # Align features and labels
         if label_source == "regime" and len(labels) < len(features):
             # Regime labels drop leading vol_lookback AND trailing horizon bars.
-            # Features must be sliced from the same start offset.
             vol_lookback = labels_config.get("vol_lookback", 120)
             truncated_from = len(features)
             features = features[vol_lookback : vol_lookback + len(labels)]  # type: ignore[assignment]
@@ -291,13 +297,14 @@ class LocalTrainingOrchestrator:
                 f"for regime labels (vol_lookback={vol_lookback}, "
                 f"horizon={labels_config.get('horizon', 24)})"
             )
-        elif label_source == "forward_return" and len(labels) < len(features):
-            # Forward return labels only drop trailing horizon bars.
+        elif label_source in ("forward_return", "context") and len(labels) < len(
+            features
+        ):
             truncated_from = len(features)
             features = features[: len(labels)]  # type: ignore[assignment]
             logger.info(
                 f"Truncated features from {truncated_from} to {len(features)} "
-                f"to match forward_return labels (horizon={labels_config.get('horizon', 20)})"
+                f"to match {label_source} labels (horizon={label_config.get('horizon', 'N/A')})"
             )
 
         min_len = min(len(features), len(labels))
@@ -718,13 +725,16 @@ class LocalTrainingOrchestrator:
                 logger.warning(f"Could not resolve context source IDs: {e}")
 
         # Determine output_type from label source
-        label_src = config.get("training", {}).get("labels", {}).get("source", "zigzag")
+        label_source = (
+            config.get("training", {}).get("labels", {}).get("source", "zigzag")
+        )
         output_type_map = {
             "zigzag": "classification",
             "forward_return": "regression",
+            "context": "context_classification",
             "regime": "regime_classification",
         }
-        output_type = output_type_map.get(label_src, "classification")
+        output_type = output_type_map.get(label_source, "classification")
 
         # Create metadata
         metadata = ModelMetadataV3(

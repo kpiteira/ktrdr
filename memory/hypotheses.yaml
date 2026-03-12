@@ -2192,7 +2192,7 @@ hypotheses:
     \ in training but HOLD/SELL/BUY (or BUY/SELL/HOLD \u2192 SELL/BUY/HOLD) in backtest\
     \ execution. This pattern has been flagged in H_020 from prior experiments and\
     \ has not been conclusively investigated. Later refuted by H_INV_005, which confirmed\
-    \ no signal inversion exists — the signal chain is correctly wired throughout."
+    \ no signal inversion exists \u2014 the signal chain is correctly wired throughout."
   status: refuted
   tested_by: []
   created: '2026-03-06T00:14:10.146420'
@@ -2348,68 +2348,86 @@ hypotheses:
   status: untested
   tested_by: []
   created: '2026-03-06T04:44:03.910836'
-
-# === INVESTIGATION SESSION 2026-03-06: Evidence-based findings ===
-# These hypotheses are based on direct code analysis and data-driven testing,
-# not assessment agent speculation. See docs/designs/forward-return-regression/RESEARCH.md
-
 - id: H_INV_001
-  text: "Backtest decisions config is lost during model reconstruction, causing confidence\
-    \ threshold to default to 0.5 instead of strategy-intended value (e.g. 0.6)"
+  text: Backtest decisions config is lost during model reconstruction, causing confidence
+    threshold to default to 0.5 instead of strategy-intended value (e.g. 0.6)
   source_experiment: exp_20260306_001410_0c2bec8c
-  rationale: "Direct code analysis: reconstruct_config_from_metadata() in model_bundle.py\
-    \ hardcodes decisions={'output_format': 'classification'}, losing confidence_threshold,\
-    \ filters, and position_awareness from the original strategy config. Verified by\
-    \ simulation: conf=0.5 produces 247 trades (matching actual 246), conf=0.6 produces\
-    \ 87 trades. FIX APPLIED to model_bundle.py."
+  rationale: 'Direct code analysis: reconstruct_config_from_metadata() in model_bundle.py
+    hardcodes decisions={''output_format'': ''classification''}, losing confidence_threshold,
+    filters, and position_awareness from the original strategy config. Verified by
+    simulation: conf=0.5 produces 247 trades (matching actual 246), conf=0.6 produces
+    87 trades. FIX APPLIED to model_bundle.py.'
   status: confirmed
-  tested_by: [exp_20260306_001410_0c2bec8c]
+  tested_by:
+  - exp_20260306_001410_0c2bec8c
   created: '2026-03-06T05:20:00.000000'
-
 - id: H_INV_002
-  text: "ZigZag labeling with threshold=1.5% and lookahead=20 produces almost no HOLD\
-    \ labels, causing models to never predict HOLD (degenerate 2-class classifier)"
+  text: ZigZag labeling with threshold=1.5% and lookahead=20 produces almost no HOLD
+    labels, causing models to never predict HOLD (degenerate 2-class classifier)
   source_experiment: exp_20260306_001410_0c2bec8c
   rationale: "Empirical evidence: model produces 36.8% BUY, 0.0% HOLD, 63.2% SELL\
     \ across 115,229 bars. A 1.5% move within 20 hourly bars is common for EURUSD,\
     \ so nearly every bar gets labeled BUY or SELL. HOLD only when price is flat for\
-    \ 20+ hours — rare. This is a fundamental labeling problem, not a training problem."
+    \ 20+ hours \u2014 rare. This is a fundamental labeling problem, not a training\
+    \ problem."
   status: supported
-  tested_by: [exp_20260306_001410_0c2bec8c]
+  tested_by:
+  - exp_20260306_001410_0c2bec8c
   created: '2026-03-06T05:20:00.000000'
-
 - id: H_INV_003
-  text: "Model confidence does not correlate with prediction accuracy — higher confidence\
-    \ predictions are not more accurate (and may be slightly worse)"
+  text: "Model confidence does not correlate with prediction accuracy \u2014 higher\
+    \ confidence predictions are not more accurate (and may be slightly worse)"
   source_experiment: exp_20260306_001410_0c2bec8c
-  rationale: "Tested across all confidence levels: BUY next-bar accuracy at conf>=0.4\
-    \ is 47.5%, at conf>=0.8 is 46.3%. SELL accuracy at conf>=0.4 is 47.9%, at conf>=0.8\
-    \ is 46.4%. All below 50% (worse than random). Confidence threshold is not selecting\
-    \ for quality predictions."
+  rationale: 'Tested across all confidence levels: BUY next-bar accuracy at conf>=0.4
+    is 47.5%, at conf>=0.8 is 46.3%. SELL accuracy at conf>=0.4 is 47.9%, at conf>=0.8
+    is 46.4%. All below 50% (worse than random). Confidence threshold is not selecting
+    for quality predictions.'
   status: confirmed
-  tested_by: [exp_20260306_001410_0c2bec8c]
+  tested_by:
+  - exp_20260306_001410_0c2bec8c
   created: '2026-03-06T05:20:00.000000'
-
 - id: H_INV_004
-  text: "Current models capture a thin pre-cost edge (~1 pip/trade) that is destroyed\
-    \ by round-trip costs of ~15 pips (0.3%). Strategies need either wider edges or\
-    \ longer hold times to survive costs."
+  text: Current models capture a thin pre-cost edge (~1 pip/trade) that is destroyed
+    by round-trip costs of ~15 pips (0.3%). Strategies need either wider edges or
+    longer hold times to survive costs.
   source_experiment: exp_20260306_001410_0c2bec8c
-  rationale: "Simulation results: without costs, 36.8% win rate with 2.53x win/loss\
-    \ ratio gives positive expectancy (+0.00106/trade). With costs (0.1% commission\
-    \ + 0.05% slippage/side), win rate drops to 27.6% with 1.75x ratio, negative expectancy\
-    \ (-0.00128/trade). The cost hurdle is ~0.3% per round trip."
+  rationale: 'Simulation results: without costs, 36.8% win rate with 2.53x win/loss
+    ratio gives positive expectancy (+0.00106/trade). With costs (0.1% commission
+    + 0.05% slippage/side), win rate drops to 27.6% with 1.75x ratio, negative expectancy
+    (-0.00128/trade). The cost hurdle is ~0.3% per round trip.'
   status: confirmed
-  tested_by: [exp_20260306_001410_0c2bec8c]
+  tested_by:
+  - exp_20260306_001410_0c2bec8c
   created: '2026-03-06T05:20:00.000000'
-
 - id: H_INV_005
-  text: "Signal inversion (BUY/SELL swapped) does NOT exist — the signal chain is\
-    \ correctly wired from ZigZag labels through to trade execution"
+  text: "Signal inversion (BUY/SELL swapped) does NOT exist \u2014 the signal chain\
+    \ is correctly wired from ZigZag labels through to trade execution"
   source_experiment: exp_20260306_001410_0c2bec8c
-  rationale: "Full chain traced: ZigZag BUY=0/HOLD=1/SELL=2 → model training → softmax/argmax\
-    \ → _SIGNAL_MAP{0:BUY,1:HOLD,2:SELL} → DecisionFunction → PositionManager. No\
-    \ inversion at any point. Also refutes H_027, H_036."
+  rationale: "Full chain traced: ZigZag BUY=0/HOLD=1/SELL=2 \u2192 model training\
+    \ \u2192 softmax/argmax \u2192 _SIGNAL_MAP{0:BUY,1:HOLD,2:SELL} \u2192 DecisionFunction\
+    \ \u2192 PositionManager. No inversion at any point. Also refutes H_027, H_036."
   status: confirmed
-  tested_by: [exp_20260306_001410_0c2bec8c]
+  tested_by:
+  - exp_20260306_001410_0c2bec8c
   created: '2026-03-06T05:20:00.000000'
+- id: H_301
+  text: Wider RSI bands will increase trade count
+  source_experiment: exp_20260311_200930_4326fe0e
+  rationale: Current RSI thresholds too conservative
+  status: untested
+  tested_by: []
+  created: '2026-03-11T20:09:30.411096'
+- id: H_302
+  text: Wider RSI bands will increase trade count
+  source_experiment: exp_20260311_200930_a8a28682
+  rationale: Current RSI thresholds too conservative
+  status: untested
+  tested_by: []
+  created: '2026-03-11T20:09:30.996883'
+- id: H_303
+  text: Wider RSI bands will increase trade count
+  source_experiment: exp_20260311_200931_20f85d98
+  rationale: Current RSI thresholds too conservative
+  status: untested
+  tested_by: []
+  created: '2026-03-11T20:09:31.519321'
