@@ -244,14 +244,19 @@ class EnsembleBacktestRunner:
         from ktrdr.data.repository import DataRepository
 
         repo = DataRepository()
-        multi_tf_data = repo.load_historical_data(
+        base_tf = self.backtest_config.timeframe
+
+        # Load base timeframe data from cache
+        data = repo.load_from_cache(
             symbol=self.backtest_config.symbol,
-            timeframes=self.backtest_config.get_all_timeframes(),
+            timeframe=base_tf,
             start_date=self.backtest_config.start_date,
             end_date=self.backtest_config.end_date,
         )
-        base_tf = self.backtest_config.timeframe
-        data = multi_tf_data[base_tf]
+
+        # Build multi-TF dict (currently single-TF — ensemble models
+        # share the same base timeframe)
+        multi_tf_data = {base_tf: data}
 
         # 4. Compute features for all models
         for _name, cache in feature_caches.items():
