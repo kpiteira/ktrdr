@@ -75,7 +75,9 @@ class TestRegistryRegistration:
         registry.register("ib", _AnotherStubProvider)
 
         available = registry.available_providers()
-        assert sorted(available) == ["fred", "ib"]
+        # Builtins (cftc_cot, fred, ib) are auto-registered + our stubs override fred/ib
+        assert "fred" in available
+        assert "ib" in available
 
     def test_builtin_providers_registered(self):
         """Registry should have built-in providers registered."""

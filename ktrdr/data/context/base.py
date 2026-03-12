@@ -143,6 +143,10 @@ class ContextDataAligner:
         if hasattr(primary, "tz") and primary.tz is not None:
             primary = primary.tz_localize(None)
 
+        # Deduplicate context index (e.g., CFTC annual files overlap)
+        if ctx.index.duplicated().any():
+            ctx = ctx[~ctx.index.duplicated(keep="last")]
+
         # Combine context and primary indices, reindex, then forward-fill
         combined_index = ctx.index.union(primary).sort_values()
         aligned = ctx.reindex(combined_index)

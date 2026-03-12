@@ -12,6 +12,7 @@ trading use. See DESIGN.md for the full rationale.
 from __future__ import annotations
 
 import logging
+import math
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -117,6 +118,17 @@ class DecisionFunction:
 
         raw_signal = nn_output["signal"]
         confidence = nn_output["confidence"]
+
+        # Guard against NaN/inf from degenerate model output
+        if math.isnan(confidence) or math.isinf(confidence):
+            logger.debug(f"NaN/inf confidence at {timestamp}, defaulting to HOLD")
+            return TradingDecision(
+                signal=Signal.HOLD,
+                confidence=0.0,
+                timestamp=timestamp,
+                reasoning={"error": "nan_confidence"},
+                current_position=_POSITION_MAP[position],
+            )
 
         final_signal = self._apply_filters(
             raw_signal, confidence, position, timestamp, last_signal_time

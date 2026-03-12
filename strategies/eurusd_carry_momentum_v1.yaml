@@ -1,0 +1,125 @@
+name: eurusd_carry_momentum_v1
+version: "3.0"
+description: >
+  EURUSD carry momentum strategy combining price momentum (RSI) with
+  fundamental carry factor (US-DE yield spread), cross-pair context
+  (GBPUSD momentum), and speculative positioning (CFTC COT percentile).
+  Designed to test multi-provider external data pipeline end-to-end.
+
+training_data:
+  symbols:
+    mode: single
+    symbol: EURUSD
+  timeframes:
+    mode: single
+    timeframe: 1h
+  date_range:
+    start: "2024-01-01"
+    end: "2025-01-01"
+
+context_data:
+  # Cross-pair context — GBPUSD momentum as USD-strength proxy
+  - provider: ib
+    symbol: GBPUSD
+    timeframe: "1h"
+    instrument_type: FOREX
+    alignment: forward_fill
+
+  # Yield spread (carry factor) — US 2Y minus German long-term
+  - provider: fred
+    series: [DGS2, IRLTLT01DEM156N]
+    frequency: daily
+    alignment: forward_fill
+
+  # Speculative positioning — EUR futures net position percentile
+  - provider: cftc_cot
+    report: EUR
+    alignment: forward_fill
+
+indicators:
+  # Primary instrument — price momentum
+  rsi_14:
+    type: rsi
+    period: 14
+
+  # Cross-pair context — GBP momentum as USD-wide signal
+  gbp_rsi_14:
+    type: rsi
+    period: 14
+    data_source: GBPUSD
+
+  # Yield spread indicators — carry factor direction
+  yield_spread_rsi:
+    type: rsi
+    period: 14
+    data_source: yield_spread_DGS2_IRLTLT01DEM156N
+
+  # COT positioning — smoothed percentile rank
+  cot_percentile_ema:
+    type: ema
+    period: 4
+    data_source: cot_EUR_net_pct
+
+fuzzy_sets:
+  # Primary RSI momentum zones
+  rsi_momentum:
+    indicator: rsi_14
+    oversold: [0, 25, 40]
+    neutral: [30, 50, 70]
+    overbought: [60, 75, 100]
+
+  # Cross-pair momentum filter
+  gbp_momentum:
+    indicator: gbp_rsi_14
+    weak: [0, 30, 50]
+    strong: [50, 70, 100]
+
+  # Carry factor direction (yield spread RSI)
+  carry_direction:
+    indicator: yield_spread_rsi
+    eur_strengthening: [0, 25, 40]
+    neutral: [35, 50, 65]
+    usd_strengthening: [60, 75, 100]
+
+  # Speculative positioning extremes (contrarian)
+  positioning:
+    indicator: cot_percentile_ema
+    crowded_short: [0, 10, 25]
+    neutral: [25, 50, 75]
+    crowded_long: [75, 90, 100]
+
+nn_inputs:
+  - fuzzy_set: rsi_momentum
+    timeframes: all
+  - fuzzy_set: gbp_momentum
+    timeframes: all
+  - fuzzy_set: carry_direction
+    timeframes: all
+  - fuzzy_set: positioning
+    timeframes: all
+
+model:
+  type: mlp
+  architecture:
+    hidden_layers: [32, 16]
+    dropout: 0.2
+    activation: relu
+
+decisions:
+  output_format: regression
+  cost_model:
+    round_trip_cost: 0.003
+    min_edge_multiplier: 1.5
+  position_awareness: true
+  filters:
+    min_signal_separation: 4
+
+training:
+  labels:
+    source: forward_return
+    horizon: 20
+  loss: huber
+  huber_delta: 0.01
+  epochs: 100
+  learning_rate: 0.001
+  validation_split: 0.2

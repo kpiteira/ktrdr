@@ -64,6 +64,7 @@ class FeatureCache:
     def compute_features(
         self,
         data: dict[str, pd.DataFrame],
+        context_data: dict[str, pd.DataFrame] | None = None,
     ) -> pd.DataFrame:
         """Compute features for backtesting.
 
@@ -99,9 +100,9 @@ class FeatureCache:
 
             reqs = tf_requirements[timeframe]
 
-            # Compute indicators
+            # Compute indicators (pass context_data for data_source routing)
             indicator_df = self.indicator_engine.compute_for_timeframe(
-                df, timeframe, reqs["indicators"]
+                df, timeframe, reqs["indicators"], context_data=context_data
             )
 
             # Apply fuzzy sets
@@ -158,21 +159,28 @@ class FeatureCache:
 
         return result
 
-    def compute_all_features(self, data: dict[str, pd.DataFrame]) -> None:
+    def compute_all_features(
+        self,
+        data: dict[str, pd.DataFrame],
+        context_data: dict[str, pd.DataFrame] | None = None,
+    ) -> None:
         """Pre-compute all features for backtesting.
 
         Args:
             data: Dict mapping timeframes to OHLCV DataFrames.
                 For single-TF: {"1h": df}. For multi-TF: {"1h": df, "5m": df, ...}
+            context_data: Optional dict mapping source_id to aligned DataFrames
+                for external data (FRED, IB cross-pair, CFTC, etc.)
         """
         total_bars = sum(len(df) for df in data.values())
         logger.info(
             f"FeatureCache: Pre-computing features for {len(data)} timeframe(s), "
             f"{total_bars} total bars..."
+            + (f", {len(context_data)} context source(s)" if context_data else "")
         )
 
         # compute_features already handles multi-timeframe correctly
-        self._cached_features = self.compute_features(data)
+        self._cached_features = self.compute_features(data, context_data=context_data)
 
         # Cache index from base timeframe
         base_tf = self._get_base_timeframe_key(data)
