@@ -82,9 +82,9 @@ class TestDominantRegime:
             result = r.route(
                 probs, previous_regime=None, current_position=PositionStatus.FLAT
             )
-            assert result.active_model == expected_model, (
-                f"Regime {regime} should route to {expected_model}"
-            )
+            assert (
+                result.active_model == expected_model
+            ), f"Regime {regime} should route to {expected_model}"
 
     def test_flat_action_returns_no_model(self, router: RegimeRouter) -> None:
         result = router.route(
