@@ -415,18 +415,23 @@ class TrainingPipeline:
         price_data: dict[str, pd.DataFrame], label_config: dict[str, Any]
     ) -> torch.Tensor:
         """
-        Generate training labels with support for ZigZag (classification) and
-        forward return (regression) modes.
+        Generate training labels with support for ZigZag (classification),
+        forward return (regression), and context (3-class classification) modes.
 
         Args:
             price_data: Dictionary mapping timeframes to OHLCV data
             label_config: Label generation configuration. Key fields:
-                - source: "zigzag" (default) or "forward_return"
+                - source: "zigzag" (default), "forward_return", or "context"
                 - For zigzag: zigzag_threshold, label_lookahead
                 - For forward_return: horizon (int)
+                - For context: horizon, bullish_threshold, bearish_threshold
 
         Returns:
-            Tensor of labels (LongTensor for zigzag, FloatTensor for forward_return)
+            Tensor of labels:
+                - LongTensor for zigzag (BUY=0, SELL=1, HOLD=2)
+                - FloatTensor for forward_return (continuous)
+                - LongTensor for context (BULLISH=0, BEARISH=1, NEUTRAL=2)
+                  after dropping trailing NaN bars
         """
         source = label_config.get("source", "zigzag")
 

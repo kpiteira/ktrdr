@@ -37,6 +37,8 @@ class ModelMetadata:
         training_symbols: Symbols used during training
         training_timeframes: Timeframes used during training
         training_metrics: Training metrics (loss, accuracy, etc.)
+        output_type: What the model predicts — "classification" (default/zigzag),
+            "regression", "context_classification", or "regime_classification"
     """
 
     # Identity

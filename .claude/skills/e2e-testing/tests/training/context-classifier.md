@@ -51,9 +51,12 @@ cp strategies/context_classifier_seed_v1.yaml ~/.ktrdr/shared/strategies/context
 
 ### 1. Environment Setup
 
+**Prerequisite:** Set `REPO_ROOT` to the repository root directory before running.
+
 **Command:**
 ```bash
-cd /Users/karl/Documents/dev/ktrdr-impl-predictive-features-M5
+REPO_ROOT="${REPO_ROOT:-$(git rev-parse --show-toplevel)}"
+cd "$REPO_ROOT"
 source .env.sandbox
 API_PORT=${KTRDR_API_PORT:-8002}
 echo "Using API_PORT=$API_PORT"
@@ -66,7 +69,7 @@ echo "Using API_PORT=$API_PORT"
 
 **Command:**
 ```bash
-cd /Users/karl/Documents/dev/ktrdr-impl-predictive-features-M5
+cd "$REPO_ROOT"
 cp strategies/context_classifier_seed_v1.yaml ~/.ktrdr/shared/strategies/context_classifier_seed_v1.yaml
 echo "Strategy copied"
 ls -la ~/.ktrdr/shared/strategies/context_classifier_seed_v1.yaml
@@ -79,7 +82,7 @@ ls -la ~/.ktrdr/shared/strategies/context_classifier_seed_v1.yaml
 
 **Command:**
 ```bash
-cd /Users/karl/Documents/dev/ktrdr-impl-predictive-features-M5
+cd "$REPO_ROOT"
 source .env.sandbox
 API_PORT=${KTRDR_API_PORT:-8002}
 
@@ -108,7 +111,7 @@ echo "Task ID: $TASK_ID"
 
 **Command:**
 ```bash
-cd /Users/karl/Documents/dev/ktrdr-impl-predictive-features-M5
+cd "$REPO_ROOT"
 source .env.sandbox
 API_PORT=${KTRDR_API_PORT:-8002}
 
@@ -136,7 +139,7 @@ echo "$TRAIN_RESULT" | jq '{status:.data.status, samples:.data.result_summary.da
 
 **Command:**
 ```bash
-cd /Users/karl/Documents/dev/ktrdr-impl-predictive-features-M5
+cd "$REPO_ROOT"
 
 # Find the model directory
 MODEL_DIR=$(ls -td ~/.ktrdr/shared/models/context_classifier_seed_v1/1d_v*/ 2>/dev/null | head -1)
@@ -165,7 +168,7 @@ echo "output_type: $OUTPUT_TYPE"
 
 **Command:**
 ```bash
-cd /Users/karl/Documents/dev/ktrdr-impl-predictive-features-M5
+cd "$REPO_ROOT"
 
 MODEL_DIR=$(ls -td ~/.ktrdr/shared/models/context_classifier_seed_v1/1d_v*/ 2>/dev/null | head -1)
 if [ -z "$MODEL_DIR" ]; then
@@ -199,7 +202,7 @@ echo "output_activation: $OUTPUT_ACTIVATION"
 
 **Command:**
 ```bash
-cd /Users/karl/Documents/dev/ktrdr-impl-predictive-features-M5
+cd "$REPO_ROOT"
 
 MODEL_DIR=$(ls -td ~/.ktrdr/shared/models/context_classifier_seed_v1/1d_v*/ 2>/dev/null | head -1)
 if [ -z "$MODEL_DIR" ]; then
@@ -242,7 +245,7 @@ fi
 
 **Command:**
 ```bash
-cd /Users/karl/Documents/dev/ktrdr-impl-predictive-features-M5
+cd "$REPO_ROOT"
 source .env.sandbox
 API_PORT=${KTRDR_API_PORT:-8002}
 
@@ -294,7 +297,7 @@ curl -s "http://localhost:$API_PORT/api/v1/operations/$TASK_ID" | \
 
 **Sanity check command:**
 ```bash
-cd /Users/karl/Documents/dev/ktrdr-impl-predictive-features-M5
+cd "$REPO_ROOT"
 source .env.sandbox
 API_PORT=${KTRDR_API_PORT:-8002}
 

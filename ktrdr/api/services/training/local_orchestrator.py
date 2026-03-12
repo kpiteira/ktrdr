@@ -262,6 +262,13 @@ class LocalTrainingOrchestrator:
                 "source": "forward_return",
                 "horizon": labels_config.get("horizon", 20),
             }
+        elif label_source == "context":
+            label_config = {
+                "source": "context",
+                "horizon": labels_config.get("horizon", 5),
+                "bullish_threshold": labels_config.get("bullish_threshold", 0.005),
+                "bearish_threshold": labels_config.get("bearish_threshold", -0.005),
+            }
         else:
             label_config = {
                 "source": "zigzag",
@@ -272,14 +279,16 @@ class LocalTrainingOrchestrator:
         labels = TrainingPipeline.create_labels(price_data, label_config)
 
         # Align features and labels
-        # For forward_return labels: labels are shorter (last `horizon` bars dropped),
-        # so truncate features from the front to match
-        if label_source == "forward_return" and len(labels) < len(features):
+        # For forward_return and context labels: labels are shorter (last `horizon`
+        # bars dropped), so truncate features from the front to match
+        if label_source in ("forward_return", "context") and len(labels) < len(
+            features
+        ):
             truncated_from = len(features)
             features = features[: len(labels)]  # type: ignore[assignment]
             logger.info(
                 f"Truncated features from {truncated_from} to {len(features)} "
-                f"to match forward return labels (horizon={labels_config.get('horizon', 20)})"
+                f"to match {label_source} labels (horizon={label_config.get('horizon', 'N/A')})"
             )
 
         min_len = min(len(features), len(labels))

@@ -792,7 +792,7 @@ class HostTrainingOrchestrator:
             ):
                 logger.info(
                     f"Truncated features from {len(features)} to {len(labels)} "
-                    f"to match {label_source} labels (horizon={labels_config.get('horizon')})"
+                    f"to match {label_source} labels (horizon={label_config.get('horizon', 'N/A')})"
                 )
                 features = features[: len(labels)]
 

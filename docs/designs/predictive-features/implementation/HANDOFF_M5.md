@@ -61,7 +61,7 @@
 
 **Gotchas:**
 - CLI uses `--start`/`--end` not `--start-date`/`--end-date`
-- Strategy must be in shared dir (`/Users/karl/.ktrdr/shared/strategies/`)
+- Strategy must be in shared dir (`~/.ktrdr/shared/strategies/`)
 - Sandbox rebuild needed: port conflicts with ktrdr-prod (5020, 4317/4318); scale down assessment-agent and training-worker-2
 - Fresh DB needs `docker exec <backend> alembic upgrade head` (migrations don't auto-run)
 
