@@ -86,7 +86,7 @@ def run_ensemble():
     for regime, metrics in results.per_regime_metrics.items():
         print(f"  {regime}: {metrics['bars']} bars, {metrics['trades']} trades")
 
-    print(f"\n--- Regime Transitions (first 10) ---")
+    print("\n--- Regime Transitions (first 10) ---")
     for t in results.regime_sequence[:10]:
         print(f"  {t['timestamp']}: {t['from']} -> {t['to']}")
     if len(results.regime_sequence) > 10:

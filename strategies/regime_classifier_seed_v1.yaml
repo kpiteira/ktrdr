@@ -113,7 +113,7 @@ training:
   labels:
     source: regime
     horizon: 24
-    trending_threshold: 0.5
+    trending_threshold: 0.3
     vol_crisis_threshold: 2.0
     vol_lookback: 120
   loss: cross_entropy

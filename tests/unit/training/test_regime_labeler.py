@@ -309,7 +309,7 @@ class TestGenerateLabels:
         """Default parameters match specification."""
         labeler = RegimeLabeler()
         assert labeler.horizon == 24
-        assert labeler.trending_threshold == 0.5
+        assert labeler.trending_threshold == 0.3
         assert labeler.vol_crisis_threshold == 2.0
         assert labeler.vol_lookback == 120
 
