@@ -118,6 +118,19 @@ class DecisionFunction:
         raw_signal = nn_output["signal"]
         confidence = nn_output["confidence"]
 
+        # Guard against NaN/inf from degenerate model output
+        import math
+
+        if math.isnan(confidence) or math.isinf(confidence):
+            logger.debug(f"NaN/inf confidence at {timestamp}, defaulting to HOLD")
+            return TradingDecision(
+                signal=Signal.HOLD,
+                confidence=0.0,
+                timestamp=timestamp,
+                reasoning={"error": "nan_confidence"},
+                current_position=_POSITION_MAP[position],
+            )
+
         final_signal = self._apply_filters(
             raw_signal, confidence, position, timestamp, last_signal_time
         )
