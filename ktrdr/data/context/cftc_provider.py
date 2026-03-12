@@ -141,7 +141,9 @@ class CftcCotProvider(ContextDataProvider):
             {"close": raw_data["net_position"]},
             index=raw_data.index,
         )
-        net_pos_df = net_pos_df[(net_pos_df.index >= ts_start) & (net_pos_df.index <= ts_end)]
+        net_pos_df = net_pos_df[
+            (net_pos_df.index >= ts_start) & (net_pos_df.index <= ts_end)
+        ]
 
         # Build net_pct result: 52w percentile as 'close', keep 156w as extra column
         # Use 52w as primary (more responsive) — 156w available for multi-input strategies
@@ -154,7 +156,9 @@ class CftcCotProvider(ContextDataProvider):
         )
         # Drop rows where percentile is NaN (warm-up period), then filter to date range
         net_pct_df = net_pct_df.dropna(subset=["close"])
-        net_pct_df = net_pct_df[(net_pct_df.index >= ts_start) & (net_pct_df.index <= ts_end)]
+        net_pct_df = net_pct_df[
+            (net_pct_df.index >= ts_start) & (net_pct_df.index <= ts_end)
+        ]
 
         results = [
             ContextDataResult(
@@ -226,7 +230,11 @@ class CftcCotProvider(ContextDataProvider):
         """
         # Try cache first
         cached = self._load_from_cache(report)
-        if cached is not None and not cached.empty and isinstance(cached.index, pd.DatetimeIndex):
+        if (
+            cached is not None
+            and not cached.empty
+            and isinstance(cached.index, pd.DatetimeIndex)
+        ):
             # Filter to date range
             filtered = cached[
                 (cached.index >= pd.Timestamp(start_date))
@@ -274,7 +282,9 @@ class CftcCotProvider(ContextDataProvider):
                         zf = zipfile.ZipFile(BytesIO(response.content))
                         for name in zf.namelist():
                             if name.endswith(".txt"):
-                                csv_text = zf.read(name).decode("utf-8", errors="replace")
+                                csv_text = zf.read(name).decode(
+                                    "utf-8", errors="replace"
+                                )
                                 df = pd.read_csv(StringIO(csv_text))
                                 frames.append(df)
                                 logger.debug(f"Loaded CFTC TFF {year}: {len(df)} rows")
@@ -342,7 +352,9 @@ class CftcCotProvider(ContextDataProvider):
             return pd.DataFrame(columns=["net_position"])
 
         # Filter for target contract
-        mask = df[COL_MARKET].astype(str).str.contains(contract_name, case=False, na=False)
+        mask = (
+            df[COL_MARKET].astype(str).str.contains(contract_name, case=False, na=False)
+        )
         filtered = df[mask].copy()
 
         if filtered.empty:

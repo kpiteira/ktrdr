@@ -74,17 +74,17 @@ class TestCarryMomentumStrategyParsing:
         indicators = set(strategy["indicators"].keys())
         for fs_name, fs_def in strategy["fuzzy_sets"].items():
             indicator_ref = fs_def["indicator"]
-            assert indicator_ref in indicators, (
-                f"Fuzzy set '{fs_name}' references unknown indicator '{indicator_ref}'"
-            )
+            assert (
+                indicator_ref in indicators
+            ), f"Fuzzy set '{fs_name}' references unknown indicator '{indicator_ref}'"
 
     def test_nn_inputs_reference_valid_fuzzy_sets(self, strategy: dict) -> None:
         """Each nn_input must reference a fuzzy set that exists."""
         fuzzy_sets = set(strategy["fuzzy_sets"].keys())
         for inp in strategy["nn_inputs"]:
-            assert inp["fuzzy_set"] in fuzzy_sets, (
-                f"nn_input references unknown fuzzy set '{inp['fuzzy_set']}'"
-            )
+            assert (
+                inp["fuzzy_set"] in fuzzy_sets
+            ), f"nn_input references unknown fuzzy set '{inp['fuzzy_set']}'"
 
     def test_all_four_fuzzy_sets_in_inputs(self, strategy: dict) -> None:
         """All 4 fuzzy sets should be used in nn_inputs."""
