@@ -84,3 +84,15 @@
 **Next Task Notes (9.6 - E2E Validation):**
 - E2E test should exercise the real backtest CLI or engine with external data providers
 - Requires sandbox running with FRED API key and cached IB data
+
+## Task 9.6 Complete: E2E Validation
+
+**E2E test:** `backtest/context-data-multi-provider` — 12 steps, **PASSED**
+
+**Bugs found and fixed during E2E:**
+1. **CFTC headerless TFF format**: `FinFutWk.txt` has no header row — parser treated first data row as column headers. Fixed: detect headerless format, use positional columns + download annual zip files for historical data.
+2. **tz-aware vs tz-naive comparison**: Engine passes tz-aware UTC dates, CFTC index is tz-naive. Fixed: strip timezone in `fetch()`.
+3. **Duplicate dates from overlapping annual files**: Annual CFTC zips overlap year boundaries. Fixed: deduplicate in both parser and aligner.
+4. **NaN confidence crash**: Degenerate model output caused `ValueError` in `TradingDecision.__post_init__`. Fixed: guard in `decision_function.py`, default to HOLD.
+
+**Key evidence:** Training completed with 3 providers, metadata has 11 features, backtest loaded all context data (5661 bars × 11 features), produced 1 trade with $1,042 return.
