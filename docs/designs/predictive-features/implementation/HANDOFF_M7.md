@@ -70,3 +70,10 @@
 - Ensemble overhead: 2.5s vs 0.86s baseline (3x, due to loading 3 models + routing per bar)
 - Transition costs: $0 (no transitions)
 - Conclusion: Infrastructure works end-to-end. Real regime differentiation requires better-trained regime classifier.
+
+## Task 7.7 Complete: Validation
+
+**E2E Test:** `backtest/ensemble-regime-routed` — PASSED (4 steps, 2.74s execution)
+- Config loads, 3 ModelBundles load with correct output_types, backtest completes with 51 trades
+- Two expected WARNs: data range yields 2358 bars (not 3000+), seed classifier collapses to one regime
+- Both are model/data quality issues, not code bugs — documented in test troubleshooting section
