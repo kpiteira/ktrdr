@@ -207,6 +207,8 @@ class RegimeRouter:
         """
         bullish_conf = context_probs.get("bullish", 0.0)
         bearish_conf = context_probs.get("bearish", 0.0)
+        # Caller guarantees context_modifiers is not None
+        assert self._composition.context_modifiers is not None
         mods = self._composition.context_modifiers
 
         net_bias = bullish_conf - bearish_conf  # Range: [-1, +1]
