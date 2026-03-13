@@ -4,23 +4,26 @@ Uses TrainingPipeline static methods for indicators, then
 builds fuzzy features using FuzzySetDefinition directly.
 """
 import asyncio
-import numpy as np
 from pathlib import Path
+
+import numpy as np
 
 
 async def train():
-    import yaml
-    import json
     import datetime
+    import json
     import shutil
+
     import torch
+    import yaml
+
+    from ktrdr.config.models import FuzzySetDefinition
     from ktrdr.data.repository import DataRepository
+    from ktrdr.fuzzy.engine import FuzzyEngine
+    from ktrdr.neural.models.mlp import MLPTradingModel
+    from ktrdr.training.fuzzy_neural_processor import FuzzyNeuralProcessor
     from ktrdr.training.regime_labeler import RegimeLabeler
     from ktrdr.training.training_pipeline import TrainingPipeline
-    from ktrdr.training.fuzzy_neural_processor import FuzzyNeuralProcessor
-    from ktrdr.neural.models.mlp import MLPTradingModel
-    from ktrdr.config.models import FuzzySetDefinition
-    from ktrdr.fuzzy.engine import FuzzyEngine
 
     # Load raw config
     config_path = Path("/app/strategies/regime_classifier_seed_v1.yaml")
@@ -171,7 +174,7 @@ async def train():
         nn_model.eval()
         with torch.no_grad():
             val_out = nn_model(X_val)
-            val_loss = criterion(val_out, y_val).item()
+            criterion(val_out, y_val).item()  # compute for gradient check only
             _, val_pred = torch.max(val_out, 1)
             val_acc = (val_pred == y_val).float().mean().item()
 
