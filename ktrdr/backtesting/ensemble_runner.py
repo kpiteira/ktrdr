@@ -279,7 +279,7 @@ class EnsembleBacktestRunner:
 
         for idx in range(start_idx, len(data)):
             bar = data.iloc[idx]
-            timestamp = bar.name
+            timestamp: pd.Timestamp = bar.name  # type: ignore[assignment]
 
             bar_result = self._run_bar(
                 timestamp=timestamp,
@@ -333,7 +333,7 @@ class EnsembleBacktestRunner:
             position_manager.execute_trade(
                 signal=close_signal,
                 price=last_bar["close"],
-                timestamp=last_bar.name,
+                timestamp=last_bar.name,  # type: ignore[arg-type]
                 symbol=self.backtest_config.symbol,
             )
 
