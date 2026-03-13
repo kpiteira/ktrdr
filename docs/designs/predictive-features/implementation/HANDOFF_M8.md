@@ -52,11 +52,15 @@
 
 ## Task 8.5 Complete: Validation
 
-**E2E test:** `backtesting/context-gated-ensemble` — **PASSED** (8 steps, 0.02s)
+**Real E2E test** run inside sandbox container with 4 trained models (regime, context, trend_signal, range_signal) and real EURUSD data.
 
-**Key results:**
-- 168 bars (7 days hourly) processed with 3 regime transitions
-- Context model evaluated exactly 7 times (once per daily boundary)
-- Threshold math verified: bullish long_factor=0.88, bearish long_factor=1.21
-- Context gating blocked 16 signals vs regime-only (81 vs 97 non-HOLD)
-- Regime-only backward compat confirmed (no context state touched)
+**Bug found & fixed:** `run()` only loaded base timeframe (1h) data. Context model trained on 1d data failed with "No features computed." Fixed by collecting all required timeframes from model metadata and loading each.
+
+**Key E2E results (EURUSD Jan-Jun 2024, 2358 bars):**
+- 4 real models loaded from `~/.ktrdr/shared/models/` (via container mount)
+- Context model evaluated 120 times (once per trading day) across 2358 hourly bars
+- Real context predictions: strongly bullish Feb-May (net_bias 0.5-0.9), neutral in Jan
+- Threshold modifiers correctly computed: bullish period lowers BUY threshold from 0.65 to 0.53
+- Regime-only comparison confirmed: 0 context state, 75 transitions (identical regime behavior)
+
+**Observation:** Signal models (mean_reversion_momentum_v1) are SELL-biased (SELL=0.999) and equity-style classification blocks short-from-flat, so 0 trades in both runs. Context pipeline works correctly but threshold effect not observable in trade decisions with these models. Not an M8 issue — signal model + equity filter interaction.

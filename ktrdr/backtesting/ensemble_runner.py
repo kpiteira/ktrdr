@@ -320,25 +320,32 @@ class EnsembleBacktestRunner:
         feature_caches = self._create_feature_caches(bundles)
         decision_functions = self._create_decision_functions(bundles)
 
-        # 3. Load OHLCV data
+        # 3. Load OHLCV data for all required timeframes
         from ktrdr.data.repository import DataRepository
 
         repo = DataRepository()
         base_tf = self.backtest_config.timeframe
 
-        # Load base timeframe data from cache
-        data = repo.load_from_cache(
-            symbol=self.backtest_config.symbol,
-            timeframe=base_tf,
-            start_date=self.backtest_config.start_date,
-            end_date=self.backtest_config.end_date,
-        )
+        # Collect all timeframes needed across ensemble models
+        required_tfs: set[str] = {base_tf}
+        for _name, bundle in bundles.items():
+            for tf in bundle.metadata.training_timeframes:
+                required_tfs.add(tf)
 
-        # Build multi-TF dict (currently single-TF — ensemble models
-        # share the same base timeframe)
-        multi_tf_data = {base_tf: data}
+        # Load each required timeframe
+        multi_tf_data: dict[str, pd.DataFrame] = {}
+        for tf in required_tfs:
+            multi_tf_data[tf] = repo.load_from_cache(
+                symbol=self.backtest_config.symbol,
+                timeframe=tf,
+                start_date=self.backtest_config.start_date,
+                end_date=self.backtest_config.end_date,
+            )
+        data = multi_tf_data[base_tf]
 
         # 4. Compute features for all models
+        # Each model's cache gets the full multi-TF dict; it selects
+        # the timeframe(s) it needs based on its strategy config.
         for _name, cache in feature_caches.items():
             cache.compute_all_features(multi_tf_data)
 
