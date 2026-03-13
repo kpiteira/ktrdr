@@ -428,3 +428,70 @@ class TestEdgeCases:
             # Verify these bars are NOT also labeled trending
             volatile_bars = valid[valid == VOLATILE]
             assert (volatile_bars == VOLATILE).all()
+
+
+class TestAnalyzeLabels:
+    """Test the analyze_labels() method."""
+
+    def test_distribution_sums_to_one(self) -> None:
+        """Distribution fractions should sum to approximately 1.0."""
+        np.random.seed(42)
+        trend = np.linspace(1.08, 1.18, 500)
+        noise = np.random.normal(0, 0.003, 500)
+        close = trend + noise
+        data = _make_price_data(close, high_offset=0.004, low_offset=0.004)
+
+        labeler = MultiScaleRegimeLabeler(vol_crisis_threshold=3.0)
+        labels = labeler.generate_labels(data)
+        stats = labeler.analyze_labels(labels, data)
+
+        total_frac = sum(stats.distribution.values())
+        assert abs(total_frac - 1.0) < 0.01, f"Distribution sums to {total_frac}"
+
+    def test_mean_duration_positive(self) -> None:
+        """Mean duration should be positive for all present regimes."""
+        np.random.seed(42)
+        trend = np.linspace(1.08, 1.18, 500)
+        noise = np.random.normal(0, 0.003, 500)
+        close = trend + noise
+        data = _make_price_data(close, high_offset=0.004, low_offset=0.004)
+
+        labeler = MultiScaleRegimeLabeler(vol_crisis_threshold=3.0)
+        labels = labeler.generate_labels(data)
+        stats = labeler.analyze_labels(labels, data)
+
+        for regime, duration in stats.mean_duration_bars.items():
+            assert duration > 0, f"Duration for {regime} should be positive, got {duration}"
+
+    def test_transition_matrix_rows_sum_to_one(self) -> None:
+        """Each row in transition matrix should sum to ~1.0."""
+        np.random.seed(42)
+        # Create data with multiple regime types to get transitions
+        up = np.linspace(1.08, 1.15, 250) + np.random.normal(0, 0.003, 250)
+        down = np.linspace(1.15, 1.08, 250) + np.random.normal(0, 0.003, 250)
+        close = np.concatenate([up, down])
+        data = _make_price_data(close, high_offset=0.004, low_offset=0.004)
+
+        labeler = MultiScaleRegimeLabeler(vol_crisis_threshold=3.0)
+        labels = labeler.generate_labels(data)
+        stats = labeler.analyze_labels(labels, data)
+
+        for from_regime, to_probs in stats.transition_matrix.items():
+            row_sum = sum(to_probs.values())
+            assert abs(row_sum - 1.0) < 0.01, (
+                f"Row {from_regime} sums to {row_sum}"
+            )
+
+    def test_returns_regime_label_stats(self) -> None:
+        """analyze_labels should return RegimeLabelStats dataclass."""
+        from ktrdr.training.regime_labeler import RegimeLabelStats
+
+        close = np.linspace(1.08, 1.15, 300) + np.random.normal(0, 0.003, 300)
+        data = _make_price_data(close, high_offset=0.004, low_offset=0.004)
+
+        labeler = MultiScaleRegimeLabeler()
+        labels = labeler.generate_labels(data)
+        stats = labeler.analyze_labels(labels, data)
+
+        assert isinstance(stats, RegimeLabelStats)
+        assert stats.total_bars >= 0
