@@ -32,6 +32,8 @@ composition:
     counter_premium: 0.3
     neutral_effect: 0.05
 
+  allow_short_from_flat: true
+
   rules:
     trending_up:
       model: trend_signal

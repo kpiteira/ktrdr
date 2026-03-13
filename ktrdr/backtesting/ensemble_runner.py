@@ -118,6 +118,11 @@ class EnsembleBacktestRunner:
 
             output_type = bundle.metadata.output_type
 
+            # Inject ensemble-level allow_short_from_flat for signal models
+            if self.ensemble_config.composition.allow_short_from_flat:
+                if output_type == "classification":
+                    decisions_config["allow_short_from_flat"] = True
+
             fns[name] = DecisionFunction(
                 model=bundle.model,
                 feature_names=bundle.feature_names,

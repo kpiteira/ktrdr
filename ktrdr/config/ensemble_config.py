@@ -80,6 +80,10 @@ class CompositionConfig(BaseModel):
     context_modifiers: Optional[ContextModifiers] = Field(
         None, description="Threshold adjustments when context gate is active"
     )
+    allow_short_from_flat: bool = Field(
+        False,
+        description="Allow SELL signals from FLAT position (forex-style trading)",
+    )
     rules: dict[str, RouteRule] = Field(
         ..., description="regime_name → route rule mapping"
     )

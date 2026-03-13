@@ -90,6 +90,9 @@ class DecisionFunction:
         filters = decisions_config.get("filters", {})
         self.min_separation_hours = filters.get("min_signal_separation", 4)
         self.position_awareness = decisions_config.get("position_awareness", True)
+        self.allow_short_from_flat = decisions_config.get(
+            "allow_short_from_flat", False
+        )
 
         if self.output_format == "regression":
             cost_model = decisions_config.get("cost_model", {})
@@ -319,10 +322,11 @@ class DecisionFunction:
         if position == PositionStatus.SHORT and raw_signal == Signal.SELL:
             return Signal.HOLD
 
-        # Block short-selling from FLAT for classification (equity-style).
-        # Regression mode allows shorts — in forex there's no real "short",
-        # and regression models legitimately predict negative returns.
-        if self.output_format != "regression":
+        # Block short-selling from FLAT for equity-style classification.
+        # Forex pairs should set allow_short_from_flat=True since selling
+        # EURUSD from flat is a standard trade (buying USD against EUR).
+        # Regression mode always allows shorts.
+        if self.output_format != "regression" and not self.allow_short_from_flat:
             if raw_signal == Signal.SELL and position == PositionStatus.FLAT:
                 return Signal.HOLD
 

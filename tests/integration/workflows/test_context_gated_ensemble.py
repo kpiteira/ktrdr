@@ -193,9 +193,9 @@ class TestContextGatedPipeline:
         # Context model should have been evaluated exactly 2 times (2 days)
         # Each daily boundary triggers a new context evaluation
         context_calls = context_fn.call_count
-        assert context_calls == 2, (
-            f"Expected 2 context evaluations (2 days), got {context_calls}"
-        )
+        assert (
+            context_calls == 2
+        ), f"Expected 2 context evaluations (2 days), got {context_calls}"
 
         # Regime model should have been called every bar
         assert regime_fn.call_count == 48
@@ -313,6 +313,6 @@ class TestContextGatedPipeline:
         # long_factor = 1 + (0.7 * 0.3) = 1.21
         # adjusted_threshold = 0.5 * 1.21 = 0.605
         # confidence 0.55 < 0.605 → HOLD
-        assert result["signal"] == Signal.HOLD, (
-            "Bearish context should block low-confidence BUY"
-        )
+        assert (
+            result["signal"] == Signal.HOLD
+        ), "Bearish context should block low-confidence BUY"
