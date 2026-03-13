@@ -39,8 +39,9 @@ These are the end-state user scenarios. Each must be E2E-verifiable at the liste
 | M8 | Multi-Gate Context Integration | Context | 5 | Add context gating to ensemble, compare vs regime-only | M7, M5 |
 | M9 | External Data: Backtest + CFTC | External | 6 | Backtest strategies with external data (FRED, cross-pair, CFTC) | M6 |
 | M10 | Agent Integration | All | 5 | Researcher generates ensemble configs and evaluates regime routing | M7, M8 |
+| M11 | Multi-Scale Regime Labeler | Regime | 5 | Replace SER labeler with multi-scale zigzag — accurate regime labels | M7 |
 
-**Total: 54 tasks across 10 milestones**
+**Total: 59 tasks across 11 milestones**
 
 ---
 
@@ -72,7 +73,9 @@ Wave 5:
 M1 ─────────────────────────────────────────────────────────────────────┐
                                                                         │
 M2 ──→ M4 ──→ M7 (Ensemble + Regime Backtest) ──→ M8 (Context Gate) ──→ M10 (Agent)
-                                                    ↑
+                    ↓                               ↑
+                    M11 (Multi-Scale Labeler v2)     │
+                                                    │
 M3 ──→ M5 ─────────────────────────────────────────┘
 
 M6 ──→ M9 (External Backtest + CFTC)
@@ -148,6 +151,7 @@ predictive-features/
     M8_context_gate.md
     M9_external_data_backtest.md
     M10_agent_integration.md
+    M11_regime_labeler_v2.md
 ```
 
 ---
@@ -156,7 +160,7 @@ predictive-features/
 
 | Risk | Impact | Mitigation |
 |------|--------|------------|
-| Regime labels show no persistence (<24h average) | Thread 1 hypothesis falsified | M2 is a validation gate — stop if regimes aren't meaningful |
+| Regime labels show no persistence (<24h average) | Thread 1 hypothesis falsified | M2 is a validation gate — stop if regimes aren't meaningful. M11 replaces SER with multi-scale zigzag to fix degenerate labels. |
 | Context labels show no differentiation | Thread 2 hypothesis falsified | M3 is a validation gate — stop if context doesn't add value |
 | DecisionFunction N-class generalization breaks existing 3-class | Regression in existing backtests | M7 adds N-class; existing tests must still pass |
 | Host service label dispatch missed (again) | Models train as wrong type | Explicit dual-dispatch warning in M4 and M5 task descriptions |
