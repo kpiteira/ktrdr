@@ -18,6 +18,7 @@ from ktrdr.cli.commands.agent import agent_app
 from ktrdr.cli.commands.backtest import backtest
 from ktrdr.cli.commands.cancel import cancel
 from ktrdr.cli.commands.context import context_app
+from ktrdr.cli.commands.ensemble import ensemble_app
 from ktrdr.cli.commands.evolve import evolve_app
 from ktrdr.cli.commands.follow import follow
 from ktrdr.cli.commands.list_cmd import list_app
@@ -128,6 +129,9 @@ app.add_typer(context_app)  # ktrdr context analyze
 
 # Register regime subcommand group
 app.add_typer(regime_app)  # ktrdr regime analyze
+
+# Register ensemble subcommand group
+app.add_typer(ensemble_app)  # ktrdr ensemble backtest
 
 
 def _register_subgroups() -> None:

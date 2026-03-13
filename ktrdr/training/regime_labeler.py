@@ -38,7 +38,7 @@ class RegimeLabeler:
     def __init__(
         self,
         horizon: int = 24,
-        trending_threshold: float = 0.5,
+        trending_threshold: float = 0.3,
         vol_crisis_threshold: float = 2.0,
         vol_lookback: int = 120,
     ) -> None:

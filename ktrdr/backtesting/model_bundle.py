@@ -260,7 +260,10 @@ class ModelBundle:
         # 3. Build model architecture from config
         # The model architecture is not stored directly in metadata; start from a
         # default MLP config and allow config.json (if present) to override it.
-        model_config = {"type": "mlp", "architecture": {"hidden_layers": [64, 32]}}
+        model_config: dict[str, Any] = {
+            "type": "mlp",
+            "architecture": {"hidden_layers": [64, 32]},
+        }
 
         # Try to load full strategy config from disk if available
         config_path = path / "config.json"
@@ -275,6 +278,15 @@ class ModelBundle:
                 model_config = loaded_config["model"]
             elif "architecture" in loaded_config:
                 model_config = loaded_config
+
+        # Infer num_classes from output_type if not already in config
+        if "num_classes" not in model_config:
+            from ktrdr.backtesting.decision_function import _CLASS_NAMES
+
+            num_classes = len(
+                _CLASS_NAMES.get(metadata.output_type, _CLASS_NAMES["classification"])
+            )
+            model_config["num_classes"] = num_classes
 
         model = _build_model(model_config, input_size)
 

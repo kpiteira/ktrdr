@@ -1,6 +1,6 @@
 # Test: cli/regime-analyze
 
-**Purpose:** Validate the `ktrdr regime analyze` CLI command produces correct regime analysis output from cached OHLCV data
+**Purpose:** Validate the `ktrdr regime analyze` CLI command produces correct regime analysis output from cached OHLCV data using the multi-scale zigzag labeler
 **Duration:** <30s
 **Category:** CLI / Local Analysis
 
@@ -12,7 +12,7 @@
 - None (local command, no Docker or API server needed)
 
 **Test-specific checks:**
-- [ ] Data file exists: `data/EURUSD_1h.csv`
+- [ ] Data file exists: `data/EURUSD_1h.csv` (or via `KTRDR_DATA_DIR` shared mount)
 - [ ] Command is registered: `uv run ktrdr regime --help` shows `analyze` subcommand
 
 ---
@@ -25,8 +25,10 @@ timeframe: 1h
 data_file: data/EURUSD_1h.csv
 start_date: "2019-01-01"
 end_date: "2024-01-01"
-horizon: 48
-trending_threshold: 0.2
+macro_atr_mult: 3.0
+micro_atr_mult: 1.0
+atr_period: 14
+progression_tolerance: 0.5
 ```
 
 ---
@@ -56,15 +58,13 @@ uv run ktrdr regime --help 2>&1
 - Exit 0
 - Output contains `analyze`
 
-### 3. Run regime analyze with tuned parameters
+### 3. Run regime analyze with default parameters
 
 **Command:**
 ```bash
 uv run ktrdr regime analyze EURUSD 1h \
   --start-date 2019-01-01 \
   --end-date 2024-01-01 \
-  --horizon 48 \
-  --trending-threshold 0.2 \
   2>&1
 echo "EXIT_CODE=$?"
 ```
@@ -82,8 +82,10 @@ echo "EXIT_CODE=$?"
 
 **Expected:**
 - Contains `Parameters` header
-- Contains `Horizon` with value `48 bars`
-- Contains `Trending threshold` with value `0.2`
+- Contains `Macro ATR mult` with value `3.0`
+- Contains `Micro ATR mult` with value `1.0`
+- Contains `ATR period` with value `14`
+- Contains `Progression tolerance` with value `0.5`
 
 ### 5. Verify Distribution section
 
@@ -92,8 +94,9 @@ echo "EXIT_CODE=$?"
 **Expected:**
 - Contains `Distribution` header
 - Contains column headers: `Regime`, `Fraction`, `Bars`
-- Contains regime names: `trending_up`, `trending_down`, `ranging`
+- Contains regime names: `trending_up`, `trending_down`, `ranging`, `volatile`
 - Each regime row has a percentage (e.g., `XX.X%`) and bar count
+- No single class exceeds 60%
 
 ### 6. Verify Duration/Persistence section
 
@@ -102,7 +105,7 @@ echo "EXIT_CODE=$?"
 **Expected:**
 - Contains `Mean Duration (Persistence)` header
 - Contains column headers: `Regime`, `Mean Duration (bars)`
-- Each regime has a numeric duration value
+- Each regime has a numeric duration value > 1.0
 
 ### 7. Verify Return section
 
@@ -112,6 +115,7 @@ echo "EXIT_CODE=$?"
 - Contains `Mean Forward Return by Regime` header
 - Contains column headers: `Regime`, `Mean Return`
 - Each regime has a signed percentage return value (e.g., `+0.0123%` or `-0.0045%`)
+- trending_up return should be positive, trending_down return should be negative
 
 ### 8. Verify Transition Matrix section
 
@@ -135,20 +139,20 @@ echo "EXIT_CODE=$?"
 
 **Command:**
 ```bash
-# Run with default parameters (different from step 3)
 uv run ktrdr regime analyze EURUSD 1h \
   --start-date 2019-01-01 \
   --end-date 2024-01-01 \
-  --horizon 24 \
-  --trending-threshold 0.5 \
+  --macro-atr-mult 5.0 \
+  --micro-atr-mult 2.0 \
+  --progression-tolerance 0.8 \
   2>&1
 echo "EXIT_CODE=$?"
 ```
 
 **Expected:**
 - Exit 0
-- Distribution percentages differ from Step 3 output (different trending_threshold changes classification)
-- Parameters section shows `Horizon` as `24 bars` and `Trending threshold` as `0.5`
+- Distribution percentages differ from Step 3 output (higher ATR mults → more RANGING)
+- Parameters section shows `Macro ATR mult` as `5.0` and `Micro ATR mult` as `2.0`
 
 ### 11. Verify error on missing data
 
@@ -168,13 +172,13 @@ echo "EXIT_CODE=$?"
 
 - [ ] Data file `data/EURUSD_1h.csv` exists with substantial row count
 - [ ] `ktrdr regime analyze` exits 0 with valid symbol/timeframe
-- [ ] Output contains `Parameters` section with correct parameter values
-- [ ] Output contains `Distribution` section with regime names and percentages
-- [ ] Output contains `Mean Duration (Persistence)` section with bar durations
+- [ ] Output contains `Parameters` section with multi-scale zigzag parameter values
+- [ ] Output contains `Distribution` section with 4 regime classes, no class >60%
+- [ ] Output contains `Mean Duration (Persistence)` section with bar durations > 1.0
 - [ ] Output contains `Mean Forward Return by Regime` section with signed returns
 - [ ] Output contains `Transition Matrix` section
 - [ ] Output contains `Summary` line with bar count > 1000 and transition count
-- [ ] Different parameters (horizon, trending-threshold) produce different distribution values
+- [ ] Different parameters (macro-atr-mult, progression-tolerance) produce different distribution values
 - [ ] Invalid symbol produces exit code 1 with error message
 
 ---
@@ -186,11 +190,13 @@ echo "EXIT_CODE=$?"
 | Check | Threshold | Failure Indicates |
 |-------|-----------|-------------------|
 | Bar count > 1000 | <= 1000 fails | Date range too short or data not loaded |
-| At least 3 regime types in Distribution | < 3 fails | Labeler degenerate (all same regime) |
+| 4 regime types in Distribution | < 4 fails | Labeler degenerate (missing class) |
+| No class > 60% | Any > 60% fails | Label collapse (same issue as v1 SER) |
 | Distribution fractions sum to ~100% | < 95% or > 105% fails | Labeling math error |
 | Mean durations > 1.0 bars | Any <= 1.0 fails | Spurious regime switching |
 | Transition count > 0 | 0 fails | No regime transitions detected |
-| trending_threshold=0.2 vs 0.5 produce different distributions | Identical fails | Parameter not wired through |
+| trending_up return positive | Negative fails | Labels don't align with price direction |
+| macro_atr_mult=3.0 vs 5.0 produce different distributions | Identical fails | Parameter not wired through |
 
 ---
 
@@ -199,14 +205,15 @@ echo "EXIT_CODE=$?"
 **If data file not found:**
 - **Cause:** EURUSD 1h data not cached locally
 - **Cure:** Run `uv run ktrdr data load EURUSD 1h --start-date 2019-01-01 --end-date 2024-01-01` first
+- **Note:** In sandbox environments, data may be at `KTRDR_DATA_DIR` (shared mount path)
 
 **If import error mentioning torch/pytorch:**
-- **Cause:** regime_labeler import bypassing the direct-import workaround
-- **Cure:** Check that `ktrdr/cli/commands/regime.py` uses `importlib.util` to load regime_labeler directly
+- **Cause:** multi_scale_regime_labeler or regime_labeler pulling torch transitively
+- **Cure:** Verify CLI uses direct `from ktrdr.training.multi_scale_regime_labeler import ...` (not via `__init__.py`)
 
 **If all bars classified as one regime:**
-- **Cause:** Threshold parameters too extreme for the data
-- **Cure:** Use `--trending-threshold 0.2` for more balanced classification
+- **Cause:** ATR multiplier parameters too extreme for the data
+- **Cure:** Use default params (macro_atr_mult=3.0, micro_atr_mult=1.0) for balanced classification
 
 **If exit 0 but empty output:**
 - **Cause:** Rich console not printing to captured stdout
@@ -216,7 +223,7 @@ echo "EXIT_CODE=$?"
 
 ## Evidence to Capture
 
-- Full command output from Step 3 (tuned parameters run)
-- Full command output from Step 10 (default parameters run)
+- Full command output from Step 3 (default parameters run)
+- Full command output from Step 10 (different parameters run)
 - Error output from Step 11 (invalid symbol)
 - Data file line count (row count sanity check)

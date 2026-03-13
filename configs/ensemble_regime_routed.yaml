@@ -1,0 +1,36 @@
+# Ensemble configuration for regime-routed backtesting
+# Uses regime classifier as gate + per-regime signal models
+name: regime_routed_v1
+description: >-
+  Regime-routed ensemble: regime classifier gates routing to
+  per-regime signal models. Trending regimes use mean_reversion_momentum,
+  ranging uses bb_stochastic, volatile forces FLAT.
+
+models:
+  regime:
+    model_path: models/regime_classifier_seed/1h_latest
+    output_type: regime_classification
+
+  trend_signal:
+    model_path: models/mean_reversion_momentum_v1/1h_latest
+    output_type: classification
+
+  range_signal:
+    model_path: models/bb_stochastic_mean_reversion_eurusd_1h_v1/1h_latest
+    output_type: classification
+
+composition:
+  type: regime_route
+  gate_model: regime
+  regime_threshold: 0.4
+  stability_bars: 3
+  rules:
+    trending_up:
+      model: trend_signal
+    trending_down:
+      model: trend_signal
+    ranging:
+      model: range_signal
+    volatile:
+      action: FLAT
+  on_regime_transition: close_and_switch

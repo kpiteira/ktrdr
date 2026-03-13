@@ -26,48 +26,42 @@ def analyze(
     end_date: Optional[str] = typer.Option(
         None, "--end-date", help="End date (YYYY-MM-DD)"
     ),
-    horizon: int = typer.Option(
-        24, "--horizon", help="Forward-looking horizon in bars"
+    macro_atr_mult: float = typer.Option(
+        3.0, "--macro-atr-mult", help="ATR multiplier for macro zigzag threshold"
     ),
-    trending_threshold: float = typer.Option(
-        0.5, "--trending-threshold", help="Min SER for trending classification"
+    micro_atr_mult: float = typer.Option(
+        1.0, "--micro-atr-mult", help="ATR multiplier for micro zigzag threshold"
     ),
+    atr_period: int = typer.Option(14, "--atr-period", help="ATR calculation period"),
     vol_crisis_threshold: float = typer.Option(
         2.0, "--vol-crisis-threshold", help="RV ratio threshold for volatile regime"
     ),
     vol_lookback: int = typer.Option(
         120, "--vol-lookback", help="Bars for historical volatility baseline"
     ),
+    progression_tolerance: float = typer.Option(
+        0.5,
+        "--progression-tolerance",
+        help="Fraction of pivot pairs that must progress",
+    ),
 ) -> None:
     """Analyze market regime labels for a symbol/timeframe.
 
-    Generates forward-looking regime labels using Signed Efficiency Ratio
-    and Realized Volatility, then prints distribution, persistence, and
-    return-by-regime statistics.
+    Uses multi-scale zigzag (macro + micro) to identify market regimes.
+    Auto-adapts to any timeframe/instrument via ATR-scaled thresholds.
 
     Example:
         ktrdr regime analyze EURUSD 1h --start-date 2019-01-01 --end-date 2024-01-01
     """
-    import importlib.util as _ilu
-    import sys as _sys
-    from pathlib import Path as _Path
-
     from rich.console import Console
     from rich.table import Table
 
     from ktrdr.data.repository import DataRepository
 
-    # Import regime_labeler directly to avoid ktrdr.training.__init__ pulling in torch
-    if "ktrdr.training.regime_labeler" not in _sys.modules:
-        _spec = _ilu.spec_from_file_location(
-            "ktrdr.training.regime_labeler",
-            str(_Path(__file__).parents[2] / "training" / "regime_labeler.py"),
-        )
-        assert _spec is not None and _spec.loader is not None
-        _mod = _ilu.module_from_spec(_spec)
-        _sys.modules["ktrdr.training.regime_labeler"] = _mod
-        _spec.loader.exec_module(_mod)
-    from ktrdr.training.regime_labeler import RegimeLabeler
+    # Import directly from submodule — neither regime_labeler nor
+    # multi_scale_regime_labeler imports torch, so this is safe without
+    # going through ktrdr.training.__init__ (which pulls ModelTrainer/torch).
+    from ktrdr.training.multi_scale_regime_labeler import MultiScaleRegimeLabeler
 
     console = Console()
 
@@ -88,11 +82,13 @@ def analyze(
         f"({len(data)} bars)"
     )
 
-    labeler = RegimeLabeler(
-        horizon=horizon,
-        trending_threshold=trending_threshold,
-        vol_crisis_threshold=vol_crisis_threshold,
+    labeler = MultiScaleRegimeLabeler(
+        macro_atr_mult=macro_atr_mult,
+        micro_atr_mult=micro_atr_mult,
+        atr_period=atr_period,
         vol_lookback=vol_lookback,
+        vol_crisis_threshold=vol_crisis_threshold,
+        progression_tolerance=progression_tolerance,
     )
 
     try:
@@ -108,10 +104,12 @@ def analyze(
     params_table = Table(show_header=False, padding=(0, 2))
     params_table.add_column("Param", style="dim")
     params_table.add_column("Value")
-    params_table.add_row("Horizon", f"{horizon} bars")
-    params_table.add_row("Trending threshold", f"{trending_threshold}")
+    params_table.add_row("Macro ATR mult", f"{macro_atr_mult}")
+    params_table.add_row("Micro ATR mult", f"{micro_atr_mult}")
+    params_table.add_row("ATR period", f"{atr_period}")
     params_table.add_row("Vol crisis threshold", f"{vol_crisis_threshold}")
     params_table.add_row("Vol lookback", f"{vol_lookback} bars")
+    params_table.add_row("Progression tolerance", f"{progression_tolerance}")
     console.print(params_table)
 
     # Distribution table

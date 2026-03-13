@@ -502,31 +502,35 @@ class TrainingPipeline:
             return label_tensor
 
         if source == "regime":
-            from ktrdr.training.regime_labeler import RegimeLabeler
-
-            horizon = label_config.get("horizon", 24)
-            trending_threshold = label_config.get("trending_threshold", 0.5)
-            vol_crisis_threshold = label_config.get("vol_crisis_threshold", 2.0)
-            vol_lookback = label_config.get("vol_lookback", 120)
-            logger.info(
-                f"TrainingPipeline.create_labels() - Regime labels "
-                f"(horizon={horizon}, trending_threshold={trending_threshold}, "
-                f"vol_crisis_threshold={vol_crisis_threshold}, vol_lookback={vol_lookback}, "
-                f"bars={len(tf_price_data)})"
+            from ktrdr.training.multi_scale_regime_labeler import (
+                MultiScaleRegimeLabeler,
             )
-            regime_labeler = RegimeLabeler(
-                horizon=horizon,
-                trending_threshold=trending_threshold,
-                vol_crisis_threshold=vol_crisis_threshold,
+
+            macro_atr_mult = label_config.get("macro_atr_mult", 3.0)
+            micro_atr_mult = label_config.get("micro_atr_mult", 1.0)
+            atr_period = label_config.get("atr_period", 14)
+            vol_lookback = label_config.get("vol_lookback", 120)
+            vol_crisis_threshold = label_config.get("vol_crisis_threshold", 2.0)
+            progression_tolerance = label_config.get("progression_tolerance", 0.5)
+            logger.info(
+                f"TrainingPipeline.create_labels() - Regime labels (multi-scale zigzag) "
+                f"(macro_atr_mult={macro_atr_mult}, micro_atr_mult={micro_atr_mult}, "
+                f"atr_period={atr_period}, vol_crisis_threshold={vol_crisis_threshold}, "
+                f"vol_lookback={vol_lookback}, bars={len(tf_price_data)})"
+            )
+            regime_labeler = MultiScaleRegimeLabeler(
+                macro_atr_mult=macro_atr_mult,
+                micro_atr_mult=micro_atr_mult,
+                atr_period=atr_period,
                 vol_lookback=vol_lookback,
+                vol_crisis_threshold=vol_crisis_threshold,
+                progression_tolerance=progression_tolerance,
             )
             labels = regime_labeler.generate_labels(tf_price_data)
-            # Drop NaN labels: first vol_lookback bars (no RV baseline) and
-            # last horizon bars (no future data) are NaN.
-            # Use deterministic slicing for correct feature alignment.
-            start_idx = vol_lookback
-            end_idx = max(len(tf_price_data) - horizon, start_idx)
-            valid_labels = labels.iloc[start_idx:end_idx]
+            # Drop NaN labels: bars outside macro zigzag segments and
+            # bars with insufficient ATR/vol data are NaN.
+            valid_mask = labels.notna()
+            valid_labels = labels[valid_mask]
             label_tensor = torch.LongTensor(valid_labels.values.astype(int))
 
             unique, counts = torch.unique(label_tensor, return_counts=True)

@@ -29,6 +29,16 @@ logger = logging.getLogger(__name__)
 # Signal index → Signal enum mapping (same as BaseNeuralModel.predict)
 _SIGNAL_MAP = {0: Signal.BUY, 1: Signal.HOLD, 2: Signal.SELL}
 
+# Class name maps per output_type — used for probabilities dict keys
+_CLASS_NAMES: dict[str, list[str]] = {
+    "classification": ["BUY", "HOLD", "SELL"],
+    "regime_classification": ["TRENDING_UP", "TRENDING_DOWN", "RANGING", "VOLATILE"],
+    "context_classification": ["BULLISH", "BEARISH", "NEUTRAL"],
+}
+
+# Output types that produce classification labels (not trading signals)
+_NON_SIGNAL_OUTPUT_TYPES = {"regime_classification", "context_classification"}
+
 # PositionStatus → Position mapping for TradingDecision.current_position
 _POSITION_MAP = {
     PositionStatus.FLAT: Position.FLAT,
@@ -52,6 +62,7 @@ class DecisionFunction:
         model: torch.nn.Module,
         feature_names: list[str],
         decisions_config: dict[str, Any],
+        output_type: str = "classification",
     ) -> None:
         """Initialize with a ready-to-infer model and configuration.
 
@@ -59,9 +70,18 @@ class DecisionFunction:
             model: nn.Module in eval mode, on CPU (from ModelBundle)
             feature_names: Ordered feature names matching model input order
             decisions_config: The 'decisions' section from strategy config
+            output_type: Model output type — determines class name labels.
+                "classification" (default): BUY/HOLD/SELL
+                "regime_classification": TRENDING_UP/TRENDING_DOWN/RANGING/VOLATILE
+                "context_classification": BULLISH/BEARISH/NEUTRAL
         """
         self.model = model
         self.feature_names = feature_names
+        self.output_type = output_type
+        self._is_signal_output = output_type not in _NON_SIGNAL_OUTPUT_TYPES
+        self._class_names = _CLASS_NAMES.get(
+            output_type, _CLASS_NAMES["classification"]
+        )
         self.output_format = decisions_config.get("output_format", "classification")
         if self.output_format not in ("classification", "regression"):
             raise ValueError(
@@ -205,7 +225,7 @@ class DecisionFunction:
                 },
             }
 
-        # Classification path (unchanged)
+        # Classification path — N-class with dynamic class names
         raw_outputs = outputs[0].cpu().numpy()
 
         # Check if softmax was already applied
@@ -220,14 +240,24 @@ class DecisionFunction:
         signal_idx = int(np.argmax(probs))
         confidence = float(probs[signal_idx])
 
+        # Build probabilities dict with class names from output_type
+        probabilities = {
+            name: float(probs[i])
+            for i, name in enumerate(self._class_names)
+            if i < len(probs)
+        }
+
+        # For signal output types (classification), map to Signal enum
+        # For non-signal types (regime/context), always return HOLD
+        if self._is_signal_output:
+            signal = _SIGNAL_MAP.get(signal_idx, Signal.HOLD)
+        else:
+            signal = Signal.HOLD
+
         return {
-            "signal": _SIGNAL_MAP[signal_idx],
+            "signal": signal,
             "confidence": confidence,
-            "probabilities": {
-                "BUY": float(probs[0]),
-                "HOLD": float(probs[1]),
-                "SELL": float(probs[2]),
-            },
+            "probabilities": probabilities,
         }
 
     def _apply_filters(

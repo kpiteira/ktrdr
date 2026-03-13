@@ -44,40 +44,61 @@ But market *state* is different from market *direction*. Volatility clusters. Tr
 
 **Why:** A labeler using current ADX to define "trending" is circular — you'd train a model to predict what you can already compute from the same indicators. Training labels must use future information to define "what regime was this, in hindsight?"
 
-**Method: Efficiency Ratio + Realized Volatility**
+#### Method v1 (SUPERSEDED): Signed Efficiency Ratio
 
-For each bar at time T, look at the next H bars (horizon, e.g., H=24 for 1h data):
+The original approach used SER (signed efficiency ratio) with a fixed horizon. This failed in practice because:
+- **Wrong timescale**: horizon=24 on 1H bars = 1 day. Real trends on 1H last days-weeks (100-500 bars). Everything looks noisy at the wrong zoom level.
+- **Not adaptive**: fixed horizon and threshold require manual tuning per timeframe/instrument. A 5% threshold means very different things for EURUSD vs BTC.
+- **Label collapse**: 68%+ RANGING with threshold=0.3, 91%+ with threshold=0.5. The SER approach structurally over-labels ranging because short horizons capture noise, not structure.
 
-1. **Signed Efficiency Ratio (SER)**
-   ```
-   SER = (close[T+H] - close[T]) / Σ|close[t+1] - close[t]| for t in [T, T+H)
-   ```
-   - SER ≈ +1.0: price moved up in a straight line → trending up
-   - SER ≈ -1.0: price moved down in a straight line → trending down
-   - SER ≈ 0.0: price went nowhere despite lots of movement → ranging
+#### Method v2 (CURRENT): Multi-Scale ZigZag
 
-2. **Realized Volatility (RV)**
-   ```
-   RV = std(bar-to-bar returns) over [T, T+H]
-   RV_ratio = RV / rolling_mean(RV, lookback=120)
-   ```
-   - RV_ratio > 2.0: extreme volatility → volatile/crisis regime
+Uses two zigzag scales to read the market's own swing structure, then classifies based on whether the local structure shows directional progression.
 
-3. **Label Assignment**
+**Core insight:** The labeler has a crystal ball (it sees the future). ZigZag requires confirmed pivots (future data) — making it the ideal tool for labeling. The classifier must then learn to predict these labels from present-only indicators.
+
+**Two-scale approach:**
+
+1. **Macro ZigZag** (large threshold: `macro_atr_mult × median(ATR/close)`)
+   - Captures the dominant trend structure — major swing highs and lows
+   - Between consecutive macro pivots: the "big picture" direction (up or down)
+
+2. **Micro ZigZag** (small threshold: `micro_atr_mult × median(ATR/close)`)
+   - Captures local swing structure within the macro move
+   - Reveals whether price is progressing directionally or chopping
+
+3. **Label Assignment (per bar):**
    ```
-   if RV_ratio > vol_crisis_threshold:    → VOLATILE     (3)
-   elif SER > +trending_threshold:        → TRENDING_UP   (0)
-   elif SER < -trending_threshold:        → TRENDING_DOWN (1)
-   else:                                  → RANGING       (2)
+   1. Volatility overlay (same RV ratio check):
+      if RV_ratio > vol_crisis_threshold → VOLATILE (3)
+
+   2. Determine macro context:
+      Bar falls within a macro zigzag segment → macro direction (up/down)
+
+   3. Check micro pivot progression within the macro segment:
+      - In macro up-segment: are micro pivot lows making higher-lows?
+        YES → TRENDING_UP (0)
+        NO  → RANGING (2)
+      - In macro down-segment: are micro pivot highs making lower-highs?
+        YES → TRENDING_DOWN (1)
+        NO  → RANGING (2)
    ```
 
-**Thresholds** (initial, tunable):
-- `vol_crisis_threshold`: 2.0 (2× historical average volatility)
-- `trending_threshold`: 0.5 (at least 50% efficient price movement)
-- `horizon`: 24 bars (1 day on 1h timeframe)
-- `vol_lookback`: 120 bars (5 days on 1h, for rolling average)
+**Why this auto-adapts:**
+- ATR scales naturally with price level (EURUSD ~0.001, BTC ~$500) and timeframe (1m ATR << 1d ATR)
+- No fixed horizon parameter — zigzag finds the data's own structure
+- Thresholds are dimensionless ATR multipliers (3× macro, 1× micro), not absolute values
+- Works for any instrument and any timeframe without parameter tuning
 
-**What makes this honest:** Like zigzag, these labels cheat — they know the future. The model's job is to predict these labels from current information only. The model can only succeed if current indicators contain information about forward regime state.
+**Parameters:**
+- `macro_atr_mult`: 3.0 (macro zigzag sensitivity — larger = fewer, bigger swings)
+- `micro_atr_mult`: 1.0 (micro zigzag sensitivity — smaller = more local detail)
+- `atr_period`: 14 (ATR calculation period)
+- `vol_lookback`: 120 (rolling window for historical volatility)
+- `vol_crisis_threshold`: 2.0 (RV ratio for VOLATILE classification)
+- `progression_tolerance`: 0.5 (fraction of consecutive pivot pairs that must progress)
+
+**What makes this honest:** Like all our labelers, this cheats — zigzag pivots are only confirmed by future data. The model's job is to predict these labels from current information only. The model can only succeed if current indicators contain information about forward regime state.
 
 ### 4.2 Integration: Regime Router + Per-Regime Signal Models (A+C)
 

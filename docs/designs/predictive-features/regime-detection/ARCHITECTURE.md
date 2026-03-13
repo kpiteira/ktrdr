@@ -60,27 +60,39 @@
 
 ## 2. New Components
 
-### 2.1 RegimeLabeler
+### 2.1 MultiScaleRegimeLabeler (v2)
+
+> **Note:** The original `RegimeLabeler` (SER-based) is preserved for backward compatibility but superseded by `MultiScaleRegimeLabeler` for all new training. See DESIGN.md Section 4.1 for rationale.
 
 ```
-Location: ktrdr/training/regime_labeler.py
+Location: ktrdr/training/multi_scale_regime_labeler.py
 
-class RegimeLabeler:
-    """Forward-looking regime labeler using Signed Efficiency Ratio + Realized Volatility.
+class MultiScaleRegimeLabeler:
+    """Forward-looking regime labeler using multi-scale ZigZag + volatility overlay.
+
+    Uses two zigzag scales to read the market's own swing structure:
+    - Macro zigzag (large threshold) captures dominant trend direction
+    - Micro zigzag (small threshold) captures local structure quality
+    - Progression of micro pivots within macro segments distinguishes
+      trending (directional progression) from ranging (choppy, non-progressive)
 
     Produces 4-class labels:
-      0 = TRENDING_UP    (efficient upward movement)
-      1 = TRENDING_DOWN  (efficient downward movement)
-      2 = RANGING         (inefficient, bounded movement)
+      0 = TRENDING_UP    (macro up-segment with progressive higher-lows)
+      1 = TRENDING_DOWN  (macro down-segment with progressive lower-highs)
+      2 = RANGING         (macro segment but micro pivots don't progress)
       3 = VOLATILE        (extreme realized volatility)
+
+    Auto-adapts to any timeframe/instrument via ATR-scaled thresholds.
     """
 
     def __init__(
         self,
-        horizon: int = 24,
-        trending_threshold: float = 0.5,
-        vol_crisis_threshold: float = 2.0,
+        macro_atr_mult: float = 3.0,
+        micro_atr_mult: float = 1.0,
+        atr_period: int = 14,
         vol_lookback: int = 120,
+        vol_crisis_threshold: float = 2.0,
+        progression_tolerance: float = 0.5,
     ) -> None: ...
 
     def generate_labels(
@@ -89,32 +101,73 @@ class RegimeLabeler:
     ) -> pd.Series:
         """Generate regime labels for each bar.
 
+        Steps:
+          1. Compute ATR → derive macro/micro zigzag thresholds as percentages
+          2. Run macro zigzag → identify macro segments (up/down)
+          3. Run micro zigzag → identify micro pivots within each macro segment
+          4. For each bar, check volatility overlay → VOLATILE if RV_ratio > threshold
+          5. For non-volatile bars, check micro pivot progression:
+             - Macro up + progressive higher-lows → TRENDING_UP
+             - Macro down + progressive lower-highs → TRENDING_DOWN
+             - Non-progressive → RANGING
+
         Returns:
-            Series with values 0-3. Last `horizon` bars are NaN (no future data).
+            Series with values 0-3. Bars outside macro segments (start/end) are NaN.
         """
 
-    def compute_signed_efficiency_ratio(
+    def _compute_atr_threshold(
         self,
-        close: pd.Series,
-        horizon: int,
-    ) -> pd.Series:
-        """Forward-looking signed efficiency ratio per bar.
+        price_data: pd.DataFrame,
+        atr_mult: float,
+    ) -> float:
+        """Compute zigzag threshold as percentage from ATR.
 
-        SER = (close[T+H] - close[T]) / Σ|close[t+1] - close[t]| for t in [T, T+H)
+        threshold = atr_mult × median(ATR(atr_period)) / median(close)
 
-        Range: -1.0 (perfect downtrend) to +1.0 (perfect uptrend).
-        Near 0 = ranging (lots of movement, no net direction).
+        This makes the threshold dimensionless and auto-scaling:
+        - Scales with price level (EURUSD vs BTC)
+        - Scales with timeframe (1m vs 1d)
         """
 
-    def compute_realized_volatility_ratio(
+    def _run_zigzag(
         self,
-        close: pd.Series,
-        horizon: int,
-        lookback: int,
-    ) -> pd.Series:
-        """Forward realized vol / rolling historical vol.
+        close: np.ndarray,
+        threshold: float,
+    ) -> list[tuple[int, float]]:
+        """Run zigzag algorithm, return list of (index, price) pivot points.
 
-        RV_ratio > threshold indicates extreme volatility (crisis regime).
+        Uses the same algorithm as ZigZagIndicator but returns structured pivots
+        instead of a sparse Series, for easier segment analysis.
+        """
+
+    def _extract_macro_segments(
+        self,
+        pivots: list[tuple[int, float]],
+        n_bars: int,
+    ) -> list[MacroSegment]:
+        """Convert macro pivots to segments with direction and bar ranges."""
+
+    def _check_micro_progression(
+        self,
+        micro_pivots: list[tuple[int, float]],
+        macro_direction: str,  # "up" or "down"
+    ) -> bool:
+        """Check whether micro pivots show directional progression.
+
+        For macro "up": check if micro pivot lows form higher-lows.
+        For macro "down": check if micro pivot highs form lower-highs.
+
+        Returns True if fraction of progressive pairs >= progression_tolerance.
+        """
+
+    def _compute_volatility_mask(
+        self,
+        price_data: pd.DataFrame,
+    ) -> pd.Series:
+        """Compute boolean mask for VOLATILE bars using RV ratio.
+
+        Uses forward realized volatility / rolling historical volatility.
+        True where RV_ratio > vol_crisis_threshold.
         """
 
     def analyze_labels(
@@ -123,7 +176,19 @@ class RegimeLabeler:
         price_data: pd.DataFrame,
     ) -> RegimeLabelStats:
         """Compute label statistics: distribution, persistence, return-by-regime,
-        transition frequency, transition matrix."""
+        transition frequency, transition matrix.
+
+        Reuses same RegimeLabelStats dataclass and analysis logic as v1.
+        """
+
+@dataclass
+class MacroSegment:
+    """A segment between two consecutive macro zigzag pivots."""
+    start_idx: int
+    end_idx: int
+    direction: str           # "up" or "down"
+    start_price: float
+    end_price: float
 
 @dataclass
 class RegimeLabelStats:
@@ -138,17 +203,26 @@ class RegimeLabelStats:
 
 **Data flow:**
 ```
-OHLCV close prices
-  → compute_signed_efficiency_ratio(close, horizon=24)
-    → Series of SER values (-1.0 to +1.0) per bar
-  → compute_realized_volatility_ratio(close, horizon=24, lookback=120)
-    → Series of RV ratios per bar
-  → classify:
-      VOLATILE(3)     if RV_ratio > vol_crisis_threshold
-      TRENDING_UP(0)  if SER > +trending_threshold
-      TRENDING_DOWN(1) if SER < -trending_threshold
-      RANGING(2)      otherwise
-    → Series of labels (0, 1, 2, 3)
+OHLCV price data
+  │
+  ├── ATR(14) → median(ATR) / median(close) → base_pct
+  │     macro_threshold = macro_atr_mult × base_pct  (e.g., 3.0 × 0.7% = 2.1%)
+  │     micro_threshold = micro_atr_mult × base_pct  (e.g., 1.0 × 0.7% = 0.7%)
+  │
+  ├── Macro ZigZag(macro_threshold) → macro pivots → macro segments
+  │     Each segment: start_idx, end_idx, direction (up/down)
+  │
+  ├── Micro ZigZag(micro_threshold) → micro pivots
+  │     Filtered to each macro segment for progression analysis
+  │
+  ├── Volatility overlay: forward RV / historical RV → VOLATILE mask
+  │
+  └── Per-bar classification:
+        VOLATILE(3)       if vol_mask is True
+        TRENDING_UP(0)    if macro=up AND micro pivots show higher-lows
+        TRENDING_DOWN(1)  if macro=down AND micro pivots show lower-highs
+        RANGING(2)        if micro pivots don't show progression
+      → Series of labels (0, 1, 2, 3)
 ```
 
 ### 2.2 Ensemble Configuration
@@ -356,13 +430,15 @@ We hit this exact dual-dispatch bug before with `forward_return` labels. The hos
 ```
 Location: ktrdr/training/training_pipeline.py AND training-host-service/orchestrator.py
 
-# Add to label source dispatch (in both files):
+# Label source dispatch (in both files):
 if label_config["source"] == "regime":
-    labeler = RegimeLabeler(
-        horizon=label_config.get("horizon", 24),
-        trending_threshold=label_config.get("trending_threshold", 0.5),
-        vol_crisis_threshold=label_config.get("vol_crisis_threshold", 2.0),
+    labeler = MultiScaleRegimeLabeler(
+        macro_atr_mult=label_config.get("macro_atr_mult", 3.0),
+        micro_atr_mult=label_config.get("micro_atr_mult", 1.0),
+        atr_period=label_config.get("atr_period", 14),
         vol_lookback=label_config.get("vol_lookback", 120),
+        vol_crisis_threshold=label_config.get("vol_crisis_threshold", 2.0),
+        progression_tolerance=label_config.get("progression_tolerance", 0.5),
     )
     return labeler.generate_labels(price_data)
 ```

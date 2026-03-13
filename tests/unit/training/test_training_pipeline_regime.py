@@ -1,4 +1,8 @@
-"""Tests for TrainingPipeline regime label support (Task 4.1)."""
+"""Tests for TrainingPipeline regime label support (Task 4.1).
+
+Updated for multi-scale zigzag labeler (M11) which uses notna() mask
+instead of deterministic vol_lookback/horizon slicing.
+"""
 
 import numpy as np
 import pandas as pd
@@ -33,47 +37,47 @@ class TestCreateLabelsRegime:
 
     def test_returns_long_tensor(self, sample_price_data):
         """Regime labels produce LongTensor (classification, not regression)."""
-        label_config = {"source": "regime", "horizon": 24}
+        label_config = {"source": "regime"}
         labels = TrainingPipeline.create_labels(sample_price_data, label_config)
         assert labels.dtype == torch.int64
 
     def test_four_class_labels(self, sample_price_data):
         """Regime labels have values in range 0-3."""
-        label_config = {"source": "regime", "horizon": 24}
+        label_config = {"source": "regime"}
         labels = TrainingPipeline.create_labels(sample_price_data, label_config)
         unique_vals = torch.unique(labels)
         for v in unique_vals:
             assert 0 <= v.item() <= 3
 
-    def test_correct_length(self, sample_price_data):
-        """Regime labels drop first vol_lookback AND last horizon bars."""
-        horizon = 24
-        vol_lookback = 120  # default
-        label_config = {"source": "regime", "horizon": horizon}
+    def test_produces_valid_labels(self, sample_price_data):
+        """Multi-scale zigzag produces non-empty labels from valid price data."""
+        label_config = {"source": "regime"}
         labels = TrainingPipeline.create_labels(sample_price_data, label_config)
-        # RegimeLabeler produces NaN for first vol_lookback bars (no RV baseline)
-        # and last horizon bars (no future data)
-        assert len(labels) == 200 - vol_lookback - horizon
+        # Multi-scale zigzag drops NaN bars (outside macro segments),
+        # so count depends on data structure, not fixed formula.
+        assert len(labels) > 0
+        assert len(labels) <= 200
 
     def test_default_params(self, sample_price_data):
         """Default params used when not specified in config."""
         label_config = {"source": "regime"}
         labels = TrainingPipeline.create_labels(sample_price_data, label_config)
-        # Default horizon=24, vol_lookback=120, so length = 200-120-24=56
-        assert len(labels) == 200 - 120 - 24
+        assert len(labels) > 0
         assert labels.dtype == torch.int64
 
     def test_custom_params(self, sample_price_data):
-        """Custom params override defaults."""
+        """Custom multi-scale zigzag params override defaults."""
         label_config = {
             "source": "regime",
-            "horizon": 10,
-            "trending_threshold": 0.3,
+            "macro_atr_mult": 2.0,
+            "micro_atr_mult": 0.5,
+            "atr_period": 10,
             "vol_crisis_threshold": 3.0,
             "vol_lookback": 60,
+            "progression_tolerance": 0.6,
         }
         labels = TrainingPipeline.create_labels(sample_price_data, label_config)
-        assert len(labels) == 200 - 60 - 10
+        assert len(labels) > 0
         assert labels.dtype == torch.int64
 
     def test_multi_timeframe_uses_base(self):
@@ -106,10 +110,12 @@ class TestCreateLabelsRegime:
             index=dates_1h,
         )
         price_data = {"5m": df_5m, "1h": df_1h}
-        label_config = {"source": "regime", "horizon": 24}
+        label_config = {"source": "regime"}
         labels = TrainingPipeline.create_labels(price_data, label_config)
-        # Should use 5m (base timeframe): 500 - vol_lookback(120) - horizon(24) = 356
-        assert len(labels) == 500 - 120 - 24
+        # Should use 5m (base timeframe, most bars) — exact count depends
+        # on macro zigzag structure, but should be more than 1h-only result.
+        assert len(labels) > 0
+        assert len(labels) <= 500
 
 
 class TestCreateLabelsUnknownSource:

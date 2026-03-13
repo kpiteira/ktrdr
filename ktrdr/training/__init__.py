@@ -13,6 +13,7 @@ except ModuleNotFoundError as _e:
         raise
 
 # StrategyTrainer removed - use LocalTrainingOrchestrator or HostTrainingOrchestrator
+from .multi_scale_regime_labeler import MultiScaleRegimeLabeler
 from .zigzag_labeler import ZigZagConfig, ZigZagLabeler
 
 # Multi-timeframe label generator temporarily disabled while updating for pure fuzzy
@@ -32,6 +33,7 @@ from .zigzag_labeler import ZigZagConfig, ZigZagLabeler
 # )
 
 __all__ = [
+    "MultiScaleRegimeLabeler",
     "ZigZagLabeler",
     "ZigZagConfig",
     "ModelStorage",
