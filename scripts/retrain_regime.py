@@ -1,4 +1,4 @@
-"""Retrain regime classifier with corrected threshold (0.3).
+"""Retrain regime classifier with multi-scale zigzag labels.
 
 Uses TrainingPipeline static methods for indicators, then
 builds fuzzy features using FuzzySetDefinition directly.
@@ -22,7 +22,7 @@ async def train():
     from ktrdr.fuzzy.engine import FuzzyEngine
     from ktrdr.neural.models.mlp import MLPTradingModel
     from ktrdr.training.fuzzy_neural_processor import FuzzyNeuralProcessor
-    from ktrdr.training.regime_labeler import RegimeLabeler
+    from ktrdr.training.multi_scale_regime_labeler import MultiScaleRegimeLabeler
     from ktrdr.training.training_pipeline import TrainingPipeline
 
     # Load raw config
@@ -32,7 +32,12 @@ async def train():
 
     labels_cfg = raw["training"]["labels"]
     print(f"Strategy: {raw['name']}", flush=True)
-    print(f"trending_threshold: {labels_cfg['trending_threshold']}", flush=True)
+    print(
+        f"macro_atr_mult={labels_cfg.get('macro_atr_mult', 3.0)}, "
+        f"micro_atr_mult={labels_cfg.get('micro_atr_mult', 1.0)}, "
+        f"atr_period={labels_cfg.get('atr_period', 14)}",
+        flush=True,
+    )
 
     # Load data
     repo = DataRepository()
@@ -42,12 +47,14 @@ async def train():
     )
     print(f"Data: {len(data)} bars", flush=True)
 
-    # Generate labels
-    labeler = RegimeLabeler(
-        horizon=labels_cfg.get("horizon", 24),
-        trending_threshold=labels_cfg.get("trending_threshold", 0.3),
-        vol_crisis_threshold=labels_cfg.get("vol_crisis_threshold", 2.0),
+    # Generate labels using multi-scale zigzag
+    labeler = MultiScaleRegimeLabeler(
+        macro_atr_mult=labels_cfg.get("macro_atr_mult", 3.0),
+        micro_atr_mult=labels_cfg.get("micro_atr_mult", 1.0),
+        atr_period=labels_cfg.get("atr_period", 14),
         vol_lookback=labels_cfg.get("vol_lookback", 120),
+        vol_crisis_threshold=labels_cfg.get("vol_crisis_threshold", 2.0),
+        progression_tolerance=labels_cfg.get("progression_tolerance", 0.5),
     )
     labels = labeler.generate_labels(data)
     valid_labels = labels.dropna()
@@ -236,7 +243,9 @@ async def train():
             "epochs": 150,
             "final_accuracy": accuracy,
             "best_val_accuracy": best_val_acc,
-            "trending_threshold": 0.3,
+            "labeler": "multi_scale_zigzag",
+            "macro_atr_mult": labels_cfg.get("macro_atr_mult", 3.0),
+            "micro_atr_mult": labels_cfg.get("micro_atr_mult", 1.0),
         },
         "feature_engineering": {
             "removed": True,

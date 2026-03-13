@@ -22,3 +22,18 @@
 
 **Next task notes (11.4):**
 - Retrain regime classifier with new labels using `scripts/retrain_regime.py`. The script needs updated default params to match multi-scale labeler.
+
+## Task 11.4 Complete: Retrain Regime Classifier + Run Ensemble Backtest
+
+**Results (multi-scale zigzag labels on EURUSD 1h, 2019-2024):**
+- Label distribution: TRENDING_UP=39.7%, TRENDING_DOWN=43.3%, RANGING=13.0%, VOLATILE=4.0%
+- Compare v1 (SER): 68%+ RANGING — massive improvement
+- Quality gate: no class >60% ✅
+- Test accuracy: 50.98% (4-class seed classifier, will improve with evolution)
+- Ensemble backtest (Jun-Sep 2024): 90 transitions, 3 regimes active (trending_up, trending_down, volatile)
+- Class weights used: VOLATILE=6.26x, RANGING=1.92x, UP=0.63x, DOWN=0.58x
+
+**Gotchas:**
+- `/app/scripts/` doesn't exist in container — must `docker cp` the script in
+- Sandbox rebuild needed to pick up code changes (kinfra sandbox down + up --build)
+- The 2024 backtest window shows high VOLATILE (58%) — realistic for that period, training set was more balanced
