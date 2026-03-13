@@ -13,9 +13,14 @@ from ktrdr.backtesting.ensemble_runner import (
     EnsembleBacktestRunner,
 )
 from ktrdr.backtesting.position_manager import PositionStatus
-from ktrdr.backtesting.regime_router import RouteDecision, TransitionAction
+from ktrdr.backtesting.regime_router import (
+    RouteDecision,
+    ThresholdModifier,
+    TransitionAction,
+)
 from ktrdr.config.ensemble_config import (
     CompositionConfig,
+    ContextModifiers,
     EnsembleConfiguration,
     ModelReference,
     RouteRule,
@@ -133,6 +138,72 @@ def _make_signal_decision(
         confidence=confidence,
         timestamp=pd.Timestamp("2024-01-01", tz="UTC"),
         reasoning={"nn_probabilities": {"BUY": 0.7, "HOLD": 0.2, "SELL": 0.1}},
+        current_position=Position.FLAT,
+    )
+
+
+CONTEXT_CLASS_NAMES = ["BULLISH", "BEARISH", "NEUTRAL"]
+
+
+def _make_context_ensemble_config() -> EnsembleConfiguration:
+    """Create ensemble config with context gate for testing."""
+    return EnsembleConfiguration(
+        name="test_context_ensemble",
+        description="Test ensemble with context gate",
+        models={
+            "regime": ModelReference(
+                name="regime",
+                model_path="models/regime_v1",
+                output_type="regime_classification",
+            ),
+            "context": ModelReference(
+                name="context",
+                model_path="models/context_v1",
+                output_type="context_classification",
+            ),
+            "trend_long": ModelReference(
+                name="trend_long",
+                model_path="models/trend_long_v1",
+                output_type="classification",
+            ),
+            "mean_reversion": ModelReference(
+                name="mean_reversion",
+                model_path="models/mean_rev_v1",
+                output_type="classification",
+            ),
+        },
+        composition=CompositionConfig(
+            type="regime_route",
+            gate_model="regime",
+            context_gate="context",
+            context_modifiers=ContextModifiers(
+                aligned_discount=0.2,
+                counter_premium=0.3,
+                neutral_effect=0.05,
+            ),
+            regime_threshold=0.4,
+            stability_bars=3,
+            rules={
+                "trending_up": RouteRule(model="trend_long"),
+                "trending_down": RouteRule(model="trend_long"),
+                "ranging": RouteRule(model="mean_reversion"),
+                "volatile": RouteRule(action="FLAT"),
+            },
+            on_regime_transition="close_and_switch",
+        ),
+    )
+
+
+def _make_context_decision(
+    bullish: float = 0.6, bearish: float = 0.1, neutral: float = 0.3
+) -> TradingDecision:
+    """Create a mock context classification decision."""
+    probs = {"BULLISH": bullish, "BEARISH": bearish, "NEUTRAL": neutral}
+    return TradingDecision(
+        signal=Signal.HOLD,
+        confidence=max(probs.values()),
+        timestamp=pd.Timestamp("2024-01-01", tz="UTC"),
+        reasoning={"nn_probabilities": probs},
         current_position=Position.FLAT,
     )
 
@@ -438,3 +509,257 @@ class TestEnsembleBacktestResults:
         assert d["ensemble_name"] == "test"
         assert "per_regime_metrics" in d
         assert "transition_count" in d
+
+
+class TestInterpretContextOutput:
+    """Tests for context probability extraction from DecisionFunction output."""
+
+    def test_extracts_context_probabilities(self) -> None:
+        runner = EnsembleBacktestRunner(
+            ensemble_config=_make_context_ensemble_config(),
+            backtest_config=_make_backtest_config(),
+        )
+        decision = _make_context_decision(bullish=0.65, bearish=0.15, neutral=0.20)
+        probs = runner._interpret_context_output(decision)
+        assert probs["bullish"] == pytest.approx(0.65)
+        assert probs["bearish"] == pytest.approx(0.15)
+        assert probs["neutral"] == pytest.approx(0.20)
+
+
+class TestContextEvaluation:
+    """Tests for context model evaluation timing and threshold application."""
+
+    def _setup_context_bar_test(
+        self,
+        context_probs: dict[str, float] | None = None,
+        signal_decision: TradingDecision | None = None,
+    ) -> tuple:
+        """Set up common test infrastructure for context bar tests."""
+        runner = EnsembleBacktestRunner(
+            ensemble_config=_make_context_ensemble_config(),
+            backtest_config=_make_backtest_config(),
+        )
+
+        regime_fn = MagicMock(return_value=_make_regime_decision("trending_up", 0.8))
+        context_fn = MagicMock(
+            return_value=_make_context_decision(bullish=0.7, bearish=0.1, neutral=0.2)
+        )
+        sig = signal_decision or _make_signal_decision(Signal.BUY, 0.7)
+        signal_fn = MagicMock(return_value=sig)
+
+        decision_fns = {
+            "regime": regime_fn,
+            "context": context_fn,
+            "trend_long": signal_fn,
+            "mean_reversion": signal_fn,
+        }
+
+        regime_cache = MagicMock()
+        regime_cache.get_features_for_timestamp.return_value = {"f1": 0.5}
+        context_cache = MagicMock()
+        context_cache.get_features_for_timestamp.return_value = {"f1": 0.5}
+        signal_cache = MagicMock()
+        signal_cache.get_features_for_timestamp.return_value = {"f1": 0.5}
+
+        caches = {
+            "regime": regime_cache,
+            "context": context_cache,
+            "trend_long": signal_cache,
+            "mean_reversion": signal_cache,
+        }
+
+        pm = MagicMock()
+        pm.current_position_status = PositionStatus.FLAT
+
+        return runner, decision_fns, caches, pm, context_fn, signal_fn
+
+    def test_context_evaluated_once_per_day(self) -> None:
+        """Context model should be evaluated once per daily bar change."""
+        runner, decision_fns, caches, pm, context_fn, _ = self._setup_context_bar_test()
+
+        router = MagicMock()
+        router.route.return_value = RouteDecision(
+            active_regime="trending_up",
+            regime_confidence=0.8,
+            active_model="trend_long",
+            transition=None,
+            reasoning="test",
+        )
+        router._confirmed_regime = "trending_up"
+
+        # Bar 1 at 10:00 Jan 15 — first call, should evaluate context
+        bar1 = pd.Series(
+            {"open": 1.10, "high": 1.11, "low": 1.09, "close": 1.105, "volume": 1000},
+            name=pd.Timestamp("2024-01-15 10:00", tz="UTC"),
+        )
+        runner._run_bar(
+            timestamp=bar1.name,
+            bar=bar1,
+            feature_caches=caches,
+            decision_functions=decision_fns,
+            router=router,
+            position_manager=pm,
+        )
+        assert context_fn.call_count == 1
+
+        # Bar 2 at 11:00 Jan 15 — same day, should NOT re-evaluate
+        bar2 = pd.Series(
+            {"open": 1.10, "high": 1.11, "low": 1.09, "close": 1.105, "volume": 1000},
+            name=pd.Timestamp("2024-01-15 11:00", tz="UTC"),
+        )
+        runner._run_bar(
+            timestamp=bar2.name,
+            bar=bar2,
+            feature_caches=caches,
+            decision_functions=decision_fns,
+            router=router,
+            position_manager=pm,
+        )
+        assert context_fn.call_count == 1  # Still 1 — same day
+
+        # Bar 3 at 10:00 Jan 16 — new day, should re-evaluate
+        bar3 = pd.Series(
+            {"open": 1.10, "high": 1.11, "low": 1.09, "close": 1.105, "volume": 1000},
+            name=pd.Timestamp("2024-01-16 10:00", tz="UTC"),
+        )
+        runner._run_bar(
+            timestamp=bar3.name,
+            bar=bar3,
+            feature_caches=caches,
+            decision_functions=decision_fns,
+            router=router,
+            position_manager=pm,
+        )
+        assert context_fn.call_count == 2  # Now 2 — new day
+
+    def test_context_probs_passed_to_router(self) -> None:
+        """Context probs should be passed to router on every bar."""
+        runner, decision_fns, caches, pm, _, _ = self._setup_context_bar_test()
+
+        router = MagicMock()
+        router.route.return_value = RouteDecision(
+            active_regime="trending_up",
+            regime_confidence=0.8,
+            active_model="trend_long",
+            transition=None,
+            reasoning="test",
+        )
+        router._confirmed_regime = "trending_up"
+
+        bar = pd.Series(
+            {"open": 1.10, "high": 1.11, "low": 1.09, "close": 1.105, "volume": 1000},
+            name=pd.Timestamp("2024-01-15 10:00", tz="UTC"),
+        )
+
+        runner._run_bar(
+            timestamp=bar.name,
+            bar=bar,
+            feature_caches=caches,
+            decision_functions=decision_fns,
+            router=router,
+            position_manager=pm,
+        )
+
+        # Router should have received context_probs
+        router.route.assert_called_once()
+        call_kwargs = router.route.call_args.kwargs
+        assert "context_probs" in call_kwargs
+        assert call_kwargs["context_probs"]["bullish"] == pytest.approx(0.7)
+
+    def test_threshold_modifier_converts_to_hold(self) -> None:
+        """Signal below context-adjusted threshold should become HOLD."""
+        # Signal with low confidence that should be blocked by adjusted threshold
+        low_conf_signal = _make_signal_decision(Signal.BUY, confidence=0.55)
+        runner, decision_fns, caches, pm, _, signal_fn = self._setup_context_bar_test(
+            signal_decision=low_conf_signal
+        )
+        # Set confidence_threshold on signal model mock so getattr works
+        signal_fn.confidence_threshold = 0.5
+
+        # Router returns a threshold modifier that raises long threshold
+        router = MagicMock()
+        router.route.return_value = RouteDecision(
+            active_regime="trending_up",
+            regime_confidence=0.8,
+            active_model="trend_long",
+            transition=None,
+            reasoning="test",
+            # Bearish context: raises long threshold
+            threshold_modifier=ThresholdModifier(long_factor=1.3, short_factor=0.8),
+        )
+        router._confirmed_regime = "trending_up"
+
+        bar = pd.Series(
+            {"open": 1.10, "high": 1.11, "low": 1.09, "close": 1.105, "volume": 1000},
+            name=pd.Timestamp("2024-01-15 10:00", tz="UTC"),
+        )
+
+        result = runner._run_bar(
+            timestamp=bar.name,
+            bar=bar,
+            feature_caches=caches,
+            decision_functions=decision_fns,
+            router=router,
+            position_manager=pm,
+        )
+
+        # confidence 0.55 * base_threshold 0.5 → adjusted 0.65 → 0.55 < 0.65 → HOLD
+        assert result["signal"] == Signal.HOLD
+
+    def test_without_context_gate_behavior_unchanged(self) -> None:
+        """Regime-only ensemble should produce identical behavior (backward compat)."""
+        runner = EnsembleBacktestRunner(
+            ensemble_config=_make_ensemble_config(),  # No context gate
+            backtest_config=_make_backtest_config(),
+        )
+
+        regime_fn = MagicMock(return_value=_make_regime_decision("trending_up", 0.8))
+        signal_fn = MagicMock(return_value=_make_signal_decision(Signal.BUY, 0.7))
+        decision_fns = {
+            "regime": regime_fn,
+            "trend_long": signal_fn,
+            "mean_reversion": signal_fn,
+        }
+
+        regime_cache = MagicMock()
+        regime_cache.get_features_for_timestamp.return_value = {"f1": 0.5}
+        signal_cache = MagicMock()
+        signal_cache.get_features_for_timestamp.return_value = {"f1": 0.5}
+        caches = {
+            "regime": regime_cache,
+            "trend_long": signal_cache,
+            "mean_reversion": signal_cache,
+        }
+
+        router = MagicMock()
+        router.route.return_value = RouteDecision(
+            active_regime="trending_up",
+            regime_confidence=0.8,
+            active_model="trend_long",
+            transition=None,
+            reasoning="test",
+        )
+        router._confirmed_regime = "trending_up"
+
+        pm = MagicMock()
+        pm.current_position_status = PositionStatus.FLAT
+
+        bar = pd.Series(
+            {"open": 1.10, "high": 1.11, "low": 1.09, "close": 1.105, "volume": 1000},
+            name=pd.Timestamp("2024-01-15 10:00", tz="UTC"),
+        )
+
+        result = runner._run_bar(
+            timestamp=bar.name,
+            bar=bar,
+            feature_caches=caches,
+            decision_functions=decision_fns,
+            router=router,
+            position_manager=pm,
+        )
+
+        # No context model should be evaluated
+        assert result["signal"] == Signal.BUY
+        # Router should NOT have received context_probs
+        call_kwargs = router.route.call_args.kwargs
+        assert call_kwargs.get("context_probs") is None
