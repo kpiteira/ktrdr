@@ -461,7 +461,9 @@ class TestAnalyzeLabels:
         stats = labeler.analyze_labels(labels, data)
 
         for regime, duration in stats.mean_duration_bars.items():
-            assert duration > 0, f"Duration for {regime} should be positive, got {duration}"
+            assert (
+                duration > 0
+            ), f"Duration for {regime} should be positive, got {duration}"
 
     def test_transition_matrix_rows_sum_to_one(self) -> None:
         """Each row in transition matrix should sum to ~1.0."""
@@ -478,14 +480,10 @@ class TestAnalyzeLabels:
 
         for from_regime, to_probs in stats.transition_matrix.items():
             row_sum = sum(to_probs.values())
-            assert abs(row_sum - 1.0) < 0.01, (
-                f"Row {from_regime} sums to {row_sum}"
-            )
+            assert abs(row_sum - 1.0) < 0.01, f"Row {from_regime} sums to {row_sum}"
 
     def test_returns_regime_label_stats(self) -> None:
         """analyze_labels should return RegimeLabelStats dataclass."""
-        from ktrdr.training.regime_labeler import RegimeLabelStats
-
         close = np.linspace(1.08, 1.15, 300) + np.random.normal(0, 0.003, 300)
         data = _make_price_data(close, high_offset=0.004, low_offset=0.004)
 
@@ -493,5 +491,9 @@ class TestAnalyzeLabels:
         labels = labeler.generate_labels(data)
         stats = labeler.analyze_labels(labels, data)
 
-        assert isinstance(stats, RegimeLabelStats)
+        # Check by type name to avoid module identity issues in test suite
+        assert type(stats).__name__ == "RegimeLabelStats"
+        assert hasattr(stats, "distribution")
+        assert hasattr(stats, "mean_duration_bars")
+        assert hasattr(stats, "transition_matrix")
         assert stats.total_bars >= 0

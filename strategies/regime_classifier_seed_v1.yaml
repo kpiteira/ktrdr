@@ -112,10 +112,12 @@ decisions:
 training:
   labels:
     source: regime
-    horizon: 24
-    trending_threshold: 0.3
+    macro_atr_mult: 3.0
+    micro_atr_mult: 1.0
+    atr_period: 14
     vol_crisis_threshold: 2.0
     vol_lookback: 120
+    progression_tolerance: 0.5
   loss: cross_entropy
   epochs: 100
   learning_rate: 0.001

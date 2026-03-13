@@ -779,12 +779,16 @@ class HostTrainingOrchestrator:
             elif label_source == "regime":
                 label_config = {
                     "source": "regime",
-                    "horizon": labels_config.get("horizon", 24),
-                    "trending_threshold": labels_config.get("trending_threshold", 0.5),
+                    "macro_atr_mult": labels_config.get("macro_atr_mult", 3.0),
+                    "micro_atr_mult": labels_config.get("micro_atr_mult", 1.0),
+                    "atr_period": labels_config.get("atr_period", 14),
+                    "vol_lookback": labels_config.get("vol_lookback", 120),
                     "vol_crisis_threshold": labels_config.get(
                         "vol_crisis_threshold", 2.0
                     ),
-                    "vol_lookback": labels_config.get("vol_lookback", 120),
+                    "progression_tolerance": labels_config.get(
+                        "progression_tolerance", 0.5
+                    ),
                 }
             else:
                 label_config = {
@@ -796,14 +800,16 @@ class HostTrainingOrchestrator:
 
             # Align features and labels
             if label_source == "regime" and len(labels) < len(features):
-                # Regime labels drop leading vol_lookback AND trailing horizon bars.
-                vol_lookback = labels_config.get("vol_lookback", 120)
+                # Multi-scale zigzag labels: NaN bars are at segment boundaries,
+                # not deterministically at start/end. Trim features to match label count.
                 logger.info(
                     f"Aligned features from {len(features)} to {len(labels)} "
-                    f"for regime labels (vol_lookback={vol_lookback}, "
-                    f"horizon={labels_config.get('horizon', 24)})"
+                    f"for regime labels (multi-scale zigzag)"
                 )
-                features = features[vol_lookback : vol_lookback + len(labels)]
+                # Labels are already filtered to valid-only by training_pipeline.
+                # Trim features from the end to match (features have more bars
+                # since they don't lose trailing bars).
+                features = features[: len(labels)]
             elif label_source in ("forward_return", "context") and len(
                 labels
             ) < len(features):
