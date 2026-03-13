@@ -37,3 +37,12 @@
 - `/app/scripts/` doesn't exist in container — must `docker cp` the script in
 - Sandbox rebuild needed to pick up code changes (kinfra sandbox down + up --build)
 - The 2024 backtest window shows high VOLATILE (58%) — realistic for that period, training set was more balanced
+
+## Task 11.5 Complete: Validation
+
+**E2E test: cli/regime-analyze** — PASSED (all sanity checks pass)
+- 4 regime classes present, no class >60%
+- Mean durations: 10-39 bars (not flickering)
+- Return differentiation: UP=+0.16%, DOWN=-0.16% (economically correct)
+- Parameter sensitivity confirmed: macro_atr_mult=3.0 vs 5.0 produces different distributions
+- Updated E2E test recipe to match multi-scale zigzag params (was stale SER params)
