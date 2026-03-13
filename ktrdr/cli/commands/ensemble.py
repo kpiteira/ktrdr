@@ -25,10 +25,10 @@ def backtest(
     start_date: str = typer.Option(..., "--start-date", help="Start date (YYYY-MM-DD)"),
     end_date: str = typer.Option(..., "--end-date", help="End date (YYYY-MM-DD)"),
     symbol: Optional[str] = typer.Option(
-        None, "--symbol", help="Override symbol (default: from model metadata)"
+        None, "--symbol", help="Trading symbol (default: EURUSD)"
     ),
     timeframe: Optional[str] = typer.Option(
-        None, "--timeframe", help="Override timeframe (default: from model metadata)"
+        None, "--timeframe", help="Timeframe (default: 1h)"
     ),
     initial_capital: float = typer.Option(
         100000.0, "--capital", help="Initial capital"

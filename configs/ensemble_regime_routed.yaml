@@ -8,15 +8,15 @@ description: >-
 
 models:
   regime:
-    model_path: /Users/karl/.ktrdr/shared/models/regime_classifier_seed/1h_latest
+    model_path: models/regime_classifier_seed/1h_latest
     output_type: regime_classification
 
   trend_signal:
-    model_path: /Users/karl/.ktrdr/shared/models/mean_reversion_momentum_v1/1h_latest
+    model_path: models/mean_reversion_momentum_v1/1h_latest
     output_type: classification
 
   range_signal:
-    model_path: /Users/karl/.ktrdr/shared/models/bb_stochastic_mean_reversion_eurusd_1h_v1/1h_latest
+    model_path: models/bb_stochastic_mean_reversion_eurusd_1h_v1/1h_latest
     output_type: classification
 
 composition:
