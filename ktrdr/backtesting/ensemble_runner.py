@@ -285,17 +285,39 @@ class EnsembleBacktestRunner:
                 final_signal = signal_decision.signal
 
                 # 5. Apply context-adjusted threshold if modifier present
-                if route.threshold_modifier and final_signal != Signal.HOLD:
-                    base_threshold = getattr(
-                        decision_functions[route.active_model],
-                        "confidence_threshold",
-                        0.5,
-                    )
-                    adjusted_threshold = route.threshold_modifier.apply(
-                        base_threshold, final_signal
-                    )
-                    if signal_decision.confidence < adjusted_threshold:
-                        final_signal = Signal.HOLD
+                if route.threshold_modifier:
+                    signal_fn = decision_functions[route.active_model]
+                    output_fmt = getattr(signal_fn, "output_format", "classification")
+
+                    if output_fmt == "regression":
+                        # Regression: adjust trade_threshold, re-evaluate predicted_return
+                        base_trade_threshold = getattr(
+                            signal_fn, "trade_threshold", 0.0004
+                        )
+                        predicted_return = signal_decision.reasoning.get(
+                            "predicted_return", 0.0
+                        )
+                        buy_threshold = route.threshold_modifier.apply(
+                            base_trade_threshold, Signal.BUY
+                        )
+                        sell_threshold = route.threshold_modifier.apply(
+                            base_trade_threshold, Signal.SELL
+                        )
+                        # Re-evaluate signal with adjusted thresholds
+                        if predicted_return > buy_threshold:
+                            final_signal = Signal.BUY
+                        elif predicted_return < -sell_threshold:
+                            final_signal = Signal.SELL
+                        else:
+                            final_signal = Signal.HOLD
+                    elif final_signal != Signal.HOLD:
+                        # Classification: adjust confidence_threshold
+                        base_threshold = getattr(signal_fn, "confidence_threshold", 0.5)
+                        adjusted_threshold = route.threshold_modifier.apply(
+                            base_threshold, final_signal
+                        )
+                        if signal_decision.confidence < adjusted_threshold:
+                            final_signal = Signal.HOLD
 
         return {
             "regime": route.active_regime,

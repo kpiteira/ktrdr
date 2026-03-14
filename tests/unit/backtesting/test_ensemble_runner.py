@@ -763,3 +763,267 @@ class TestContextEvaluation:
         # Router should NOT have received context_probs
         call_kwargs = router.route.call_args.kwargs
         assert call_kwargs.get("context_probs") is None
+
+
+def _make_regression_signal_decision(
+    predicted_return: float,
+    trade_threshold: float = 0.0004,
+) -> TradingDecision:
+    """Create a regression-style signal decision with predicted_return in reasoning."""
+    if predicted_return > trade_threshold:
+        signal = Signal.BUY
+    elif predicted_return < -trade_threshold:
+        signal = Signal.SELL
+    else:
+        signal = Signal.HOLD
+
+    confidence = min(abs(predicted_return) / (3 * trade_threshold), 1.0)
+    return TradingDecision(
+        signal=signal,
+        confidence=confidence,
+        timestamp=pd.Timestamp("2024-01-01", tz="UTC"),
+        reasoning={"predicted_return": predicted_return},
+        current_position=Position.FLAT,
+    )
+
+
+class TestRegressionThresholdModifier:
+    """Tests for context-gate threshold modifier with regression signal models.
+
+    For regression models, the context gate should adjust trade_threshold
+    (not confidence_threshold) to make it easier/harder to enter positions
+    based on daily context.
+    """
+
+    def _setup_regression_bar_test(
+        self,
+        predicted_return: float = 0.0005,
+        trade_threshold: float = 0.0004,
+    ) -> tuple:
+        """Set up common infrastructure for regression threshold modifier tests."""
+        runner = EnsembleBacktestRunner(
+            ensemble_config=_make_context_ensemble_config(),
+            backtest_config=_make_backtest_config(),
+        )
+
+        regime_fn = MagicMock(return_value=_make_regime_decision("trending_up", 0.8))
+        context_fn = MagicMock(
+            return_value=_make_context_decision(bullish=0.7, bearish=0.1, neutral=0.2)
+        )
+        sig = _make_regression_signal_decision(predicted_return, trade_threshold)
+        signal_fn = MagicMock(return_value=sig)
+        # Mark signal function as regression with trade_threshold
+        signal_fn.output_format = "regression"
+        signal_fn.trade_threshold = trade_threshold
+
+        decision_fns = {
+            "regime": regime_fn,
+            "context": context_fn,
+            "trend_long": signal_fn,
+            "mean_reversion": signal_fn,
+        }
+
+        regime_cache = MagicMock()
+        regime_cache.get_features_for_timestamp.return_value = {"f1": 0.5}
+        context_cache = MagicMock()
+        context_cache.get_features_for_timestamp.return_value = {"f1": 0.5}
+        signal_cache = MagicMock()
+        signal_cache.get_features_for_timestamp.return_value = {"f1": 0.5}
+
+        caches = {
+            "regime": regime_cache,
+            "context": context_cache,
+            "trend_long": signal_cache,
+            "mean_reversion": signal_cache,
+        }
+
+        pm = MagicMock()
+        pm.current_position_status = PositionStatus.FLAT
+
+        return runner, decision_fns, caches, pm
+
+    def test_regression_buy_blocked_by_counter_trend_modifier(self) -> None:
+        """Bearish context should raise BUY trade_threshold, blocking marginal BUY."""
+        # predicted_return = 0.0005, trade_threshold = 0.0004
+        # BUY signal because 0.0005 > 0.0004
+        # With bearish context: long_factor=1.5 raises threshold to 0.0006
+        # 0.0005 < 0.0006 → should become HOLD
+        runner, decision_fns, caches, pm = self._setup_regression_bar_test(
+            predicted_return=0.0005, trade_threshold=0.0004
+        )
+
+        router = MagicMock()
+        router.route.return_value = RouteDecision(
+            active_regime="trending_up",
+            regime_confidence=0.8,
+            active_model="trend_long",
+            transition=None,
+            reasoning="test",
+            # Bearish context: raises long threshold, lowers short threshold
+            threshold_modifier=ThresholdModifier(long_factor=1.5, short_factor=0.7),
+        )
+        router._confirmed_regime = "trending_up"
+
+        bar = pd.Series(
+            {"open": 1.10, "high": 1.11, "low": 1.09, "close": 1.105, "volume": 1000},
+            name=pd.Timestamp("2024-01-15 10:00", tz="UTC"),
+        )
+
+        result = runner._run_bar(
+            timestamp=bar.name,
+            bar=bar,
+            feature_caches=caches,
+            decision_functions=decision_fns,
+            router=router,
+            position_manager=pm,
+        )
+
+        # BUY should be blocked: predicted_return 0.0005 < adjusted threshold 0.0006
+        assert result["signal"] == Signal.HOLD
+
+    def test_regression_sell_blocked_by_bullish_modifier(self) -> None:
+        """Bullish context should raise SELL trade_threshold, blocking marginal SELL."""
+        # predicted_return = -0.0005 → SELL (below -0.0004)
+        # Bullish context: short_factor=1.5 raises threshold to 0.0006
+        # |-0.0005| < 0.0006 → should become HOLD
+        runner, decision_fns, caches, pm = self._setup_regression_bar_test(
+            predicted_return=-0.0005, trade_threshold=0.0004
+        )
+
+        router = MagicMock()
+        router.route.return_value = RouteDecision(
+            active_regime="trending_up",
+            regime_confidence=0.8,
+            active_model="trend_long",
+            transition=None,
+            reasoning="test",
+            # Bullish context: lowers long threshold, raises short threshold
+            threshold_modifier=ThresholdModifier(long_factor=0.7, short_factor=1.5),
+        )
+        router._confirmed_regime = "trending_up"
+
+        bar = pd.Series(
+            {"open": 1.10, "high": 1.11, "low": 1.09, "close": 1.105, "volume": 1000},
+            name=pd.Timestamp("2024-01-15 10:00", tz="UTC"),
+        )
+
+        result = runner._run_bar(
+            timestamp=bar.name,
+            bar=bar,
+            feature_caches=caches,
+            decision_functions=decision_fns,
+            router=router,
+            position_manager=pm,
+        )
+
+        # SELL should be blocked: |predicted_return| 0.0005 < adjusted threshold 0.0006
+        assert result["signal"] == Signal.HOLD
+
+    def test_regression_buy_passes_with_aligned_modifier(self) -> None:
+        """Bullish context should lower BUY trade_threshold, allowing marginal BUY."""
+        # predicted_return = 0.00035 → HOLD (below 0.0004 threshold)
+        # Bullish context: long_factor=0.7 lowers threshold to 0.00028
+        # 0.00035 > 0.00028 → should become BUY
+        runner, decision_fns, caches, pm = self._setup_regression_bar_test(
+            predicted_return=0.00035, trade_threshold=0.0004
+        )
+
+        router = MagicMock()
+        router.route.return_value = RouteDecision(
+            active_regime="trending_up",
+            regime_confidence=0.8,
+            active_model="trend_long",
+            transition=None,
+            reasoning="test",
+            # Bullish context: lowers long threshold
+            threshold_modifier=ThresholdModifier(long_factor=0.7, short_factor=1.5),
+        )
+        router._confirmed_regime = "trending_up"
+
+        bar = pd.Series(
+            {"open": 1.10, "high": 1.11, "low": 1.09, "close": 1.105, "volume": 1000},
+            name=pd.Timestamp("2024-01-15 10:00", tz="UTC"),
+        )
+
+        result = runner._run_bar(
+            timestamp=bar.name,
+            bar=bar,
+            feature_caches=caches,
+            decision_functions=decision_fns,
+            router=router,
+            position_manager=pm,
+        )
+
+        # BUY should pass: predicted_return 0.00035 > adjusted threshold 0.00028
+        assert result["signal"] == Signal.BUY
+
+    def test_regression_strong_signal_unaffected_by_modifier(self) -> None:
+        """Strong regression signal should pass regardless of counter-trend modifier."""
+        # predicted_return = 0.002 → strong BUY (5x threshold of 0.0004)
+        # Even with bearish long_factor=1.5, threshold = 0.0006
+        # 0.002 >> 0.0006 → still BUY
+        runner, decision_fns, caches, pm = self._setup_regression_bar_test(
+            predicted_return=0.002, trade_threshold=0.0004
+        )
+
+        router = MagicMock()
+        router.route.return_value = RouteDecision(
+            active_regime="trending_up",
+            regime_confidence=0.8,
+            active_model="trend_long",
+            transition=None,
+            reasoning="test",
+            threshold_modifier=ThresholdModifier(long_factor=1.5, short_factor=0.7),
+        )
+        router._confirmed_regime = "trending_up"
+
+        bar = pd.Series(
+            {"open": 1.10, "high": 1.11, "low": 1.09, "close": 1.105, "volume": 1000},
+            name=pd.Timestamp("2024-01-15 10:00", tz="UTC"),
+        )
+
+        result = runner._run_bar(
+            timestamp=bar.name,
+            bar=bar,
+            feature_caches=caches,
+            decision_functions=decision_fns,
+            router=router,
+            position_manager=pm,
+        )
+
+        # Strong BUY should pass even with counter-trend modifier
+        assert result["signal"] == Signal.BUY
+
+    def test_regression_no_modifier_unchanged(self) -> None:
+        """Without threshold_modifier, regression signal should pass through unchanged."""
+        runner, decision_fns, caches, pm = self._setup_regression_bar_test(
+            predicted_return=0.0005, trade_threshold=0.0004
+        )
+
+        router = MagicMock()
+        router.route.return_value = RouteDecision(
+            active_regime="trending_up",
+            regime_confidence=0.8,
+            active_model="trend_long",
+            transition=None,
+            reasoning="test",
+            # No threshold_modifier
+        )
+        router._confirmed_regime = "trending_up"
+
+        bar = pd.Series(
+            {"open": 1.10, "high": 1.11, "low": 1.09, "close": 1.105, "volume": 1000},
+            name=pd.Timestamp("2024-01-15 10:00", tz="UTC"),
+        )
+
+        result = runner._run_bar(
+            timestamp=bar.name,
+            bar=bar,
+            feature_caches=caches,
+            decision_functions=decision_fns,
+            router=router,
+            position_manager=pm,
+        )
+
+        # BUY should pass through without modification
+        assert result["signal"] == Signal.BUY
