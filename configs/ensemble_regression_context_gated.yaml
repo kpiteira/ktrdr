@@ -1,0 +1,61 @@
+# =============================================================================
+# REGRESSION CONTEXT-GATED ENSEMBLE
+# =============================================================================
+# Ensemble using regression signal models with context gate for threshold
+# adjustment. Tests the core M8 capability: context modifiers affecting
+# trade_threshold for regression models.
+#
+# Architecture:
+#   regime_classifier (4-class) → route to per-regime model
+#   context_classifier (3-class, daily) → threshold modifier
+#   trend_regression_signal → regression signal for trending regimes
+#   range_regression_signal → regression signal for ranging regimes
+# =============================================================================
+
+name: regression_context_gated
+description: >-
+  Context-gated ensemble with regression signal models. Daily context
+  adjusts trade_threshold to favor aligned-trend entries and penalize
+  counter-trend entries.
+
+models:
+  regime:
+    model_path: /Users/karl/.ktrdr/shared/models/regime_classifier_seed/1h_latest
+    output_type: regime_classification
+
+  context:
+    model_path: /Users/karl/.ktrdr/shared/models/context_classifier_seed_v1/1d_latest
+    output_type: context_classification
+
+  trend_signal:
+    model_path: /Users/karl/.ktrdr/shared/models/trend_regression_signal/1h_latest
+    output_type: regression
+
+  range_signal:
+    model_path: /Users/karl/.ktrdr/shared/models/range_regression_signal/1h_latest
+    output_type: regression
+
+composition:
+  type: regime_route
+  gate_model: regime
+  context_gate: context
+  regime_threshold: 0.4
+  stability_bars: 3
+
+  context_modifiers:
+    aligned_discount: 0.2
+    counter_premium: 0.3
+    neutral_effect: 0.05
+
+  allow_short_from_flat: true
+
+  rules:
+    trending_up:
+      model: trend_signal
+    trending_down:
+      model: trend_signal
+    ranging:
+      model: range_signal
+    volatile:
+      action: FLAT
+  on_regime_transition: close_and_switch

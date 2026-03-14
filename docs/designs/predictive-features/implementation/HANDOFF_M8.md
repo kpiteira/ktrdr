@@ -30,10 +30,15 @@
 **Bugs found & fixed:**
 1. **Multi-TF data loading**: `run()` only loaded base 1h data. Context model (1d) failed with "No features computed." Fixed by collecting all required timeframes from `bundle.metadata.training_timeframes`.
 2. **Equity short-from-flat filter**: Classification models blocked all SELL signals from FLAT position — inappropriate for forex pairs. Added `allow_short_from_flat` config option to `CompositionConfig` and `DecisionFunction`, injected by runner for signal models.
+3. **Context gate inert for regression models**: Original ThresholdModifier only adjusted `confidence_threshold` (classification). Regression models skip confidence threshold entirely, using `trade_threshold = round_trip_cost * min_edge_multiplier`. Extended `_run_bar()` to detect `output_format == "regression"` and adjust `trade_threshold` instead — re-evaluates `predicted_return` against context-adjusted buy/sell thresholds.
 
-**Key E2E results (EURUSD Jan-Jun 2024, 2358 bars, sandbox container):**
-- 4 real models loaded: regime (4-class), context (3-class), trend_signal, range_signal
-- Context model evaluated daily — last eval date 2024-05-31, probs: 67% bullish, 2% bearish, 31% neutral
-- **75 trades** produced with `allow_short_from_flat: true` (vs 0 trades without)
-- 139 regime transitions across the period
-- Context-gated vs regime-only comparison: identical trade count (75 both) because signal model confidence (0.999) >> any threshold adjustment. Context gate pipeline works correctly; threshold effect would differentiate with models producing near-threshold confidence (0.55-0.75).
+**Regression signal models trained:**
+- `trend_regression_signal`: RSI/ADX/MACD/ROC → forward_return horizon=12, Huber loss, 80 epochs
+- `range_regression_signal`: Stochastic/WilliamsR/RSI/BBWidth → forward_return horizon=8, Huber loss, 80 epochs
+- Both use cost_model: rtc=0.0002, mem=2.0, trade_threshold=0.0004
+
+**Key E2E results with regression models (EURUSD Jan-Jun 2024, 2358 bars):**
+- Context-gated: **15 trades** vs Regime-only: **18 trades** — context gate blocked 3 counter-trend shorts
+- All 3 blocked trades in trending_down regime where bullish context (67.4%) raised SELL threshold
+- 95 daily context evaluations, 139 regime transitions
+- E2E test: `backtesting/regression-context-gated-ensemble` — PASSED
