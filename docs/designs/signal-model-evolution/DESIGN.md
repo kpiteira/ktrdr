@@ -42,7 +42,11 @@ The architecture works. The regime classifier identifies market states with genu
 
 ### 3.1 Layer 1: The Target Is Noise (Critical)
 
-The `ForwardReturnLabeler` computes `(close[t+h] - close[t]) / close[t]` with horizon h=8-12 bars on EURUSD 1h data.
+The `ForwardReturnLabeler` computes `(close[t+h] - close[t]) / close[t]` with horizon h=8-12 bars on EURUSD 1h data. The signal models (`trend_regression_signal` with h=12, `range_regression_signal` with h=8) use these short horizons.
+
+**We already learned this lesson with regime labeling.** In M7/M11, the original SER-based RegimeLabeler used a fixed horizon of 24 bars (1 day on 1H). It collapsed — 68%+ bars labeled RANGING because everything looks like noise at the wrong zoom level. The fix was the MultiScaleRegimeLabeler, which reads the market's own swing structure via ATR-scaled zigzag instead of using a fixed horizon. That fix worked: regime classification improved to 69-79% accuracy with balanced 4-class distribution.
+
+**But we never applied this lesson to the signal models.** The signal models still use `source: forward_return` with fixed short horizons. The same problem that plagued regime labeling — fixed horizon captures noise, not structure — is why signal models collapse to predicting the mean. The triple barrier method proposed in this document is the direct analogue of the MultiScaleRegimeLabeler for signal models: replace a fixed-horizon point-in-time label with a structure-aware, volatility-adaptive label.
 
 **Empirical measurements:**
 
