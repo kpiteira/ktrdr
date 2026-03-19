@@ -48,7 +48,6 @@ The `ForwardReturnLabeler` computes `(close[t+h] - close[t]) / close[t]` with ho
 
 **But we never applied this lesson to the signal models.** The signal models still use `source: forward_return` with fixed short horizons. The same problem that plagued regime labeling — fixed horizon captures noise, not structure — is why signal models collapse to predicting the mean. The triple barrier method proposed in this document is the direct analogue of the MultiScaleRegimeLabeler for signal models: replace a fixed-horizon point-in-time label with a structure-aware, volatility-adaptive label.
 
-
 **Empirical measurements:**
 
 | Metric | Value | Implication |
@@ -77,7 +76,7 @@ fuzzy_sets:
     overbought: [60, 70, 80]  # membership > 0 only when RSI in [60, 80]
 ```
 
-**The dead zone: RSI 40-80 has zero membership in both sets.** On EURUSD 1h data, RSI falls in this gap 39.8% of the time. For those bars, the NN receives exactly 0.0 from both RSI fuzzy features — it is completely blind to RSI.
+**The dead zone: RSI 40-60 has zero membership in both sets.** On EURUSD 1h data, RSI falls in this gap 39.8% of the time. For those bars, the NN receives exactly 0.0 from both RSI fuzzy features — it is completely blind to RSI.
 
 Measured dead zone coverage across regression signal model features:
 
@@ -227,12 +226,12 @@ Fixing any single layer alone won't help. A perfect training pipeline on noise t
   │                                                   │
   │ BROKEN (must fix)                                 │
   │                                                   │
-  │  ❌ L1: ForwardReturnLabeler (noise target, SNR=0.002) │
-  │  ❌ L2: Fuzzy set definitions (dead zones, Ruspini)   │
-  │  ❌ L3: Training loop (no minibatch, early stop, etc) │
-  │                                                       │
-  │  Signal models must remain trade generators —          │
-  │  fix all 3 layers so they can actually predict         │
+  │  ❌ L1: ForwardReturnLabeler (noise, SNR=0.002)   │
+  │  ❌ L2: Fuzzy set definitions (dead zones)        │
+  │  ❌ L3: Training loop (no minibatch/early stop)   │
+  │                                                   │
+  │  Signal models must remain trade generators —     │
+  │  fix all 3 layers so they can actually predict    │
   │                                                   │
   └──────────────────────────────────────────────────┘
 ```
@@ -293,7 +292,7 @@ Stage 1: Primary Model (determines SIDE)
   Input: market features
   Output: BUY candidate or SELL candidate
   Requirement: high RECALL (catch most real opportunities)
-  Can be simple: RSI < 30 in ranging → BUY candidate
+  In our architecture: TB-trained signal model with lowered threshold
 
 Stage 2: Meta-Labeler (determines SIZE)
   Input: primary signal + features + regime + context
@@ -306,11 +305,11 @@ Stage 2: Meta-Labeler (determines SIZE)
 
 The meta-labeler has a MUCH easier learning task than direct return prediction:
 - Binary classification (profitable / not profitable) vs continuous return regression
-- The primary model handles the hard part (direction) with domain knowledge
-- The meta-labeler only learns WHEN a known pattern works, not WHAT will happen
+- The signal model handles direction with TB-trained classification
+- The meta-labeler only learns WHEN a signal is worth taking, not WHAT direction to trade
 - Position sizing naturally manages risk — low confidence = small bet
 
-**Critical caveat:** Meta-labeling cannot create edge where none exists. If the primary model's directional signals are random (50% accuracy), meta-labeling can't fix it. **But our regime classifier IS better than random** (69-79% for regime, and regime persistence IS a genuine financial factor). A primary model that says "trade with the trend in trending regime, mean-revert in ranging" exploits a real edge — momentum and mean-reversion are the two most robust factors in finance.
+**Critical caveat:** Meta-labeling cannot create edge where none exists. If the signal model's directional predictions are random (50% accuracy), meta-labeling can't fix it. **But our regime classifier IS better than random** (69-79% for regime, and regime persistence IS a genuine financial factor). A signal model trained on TB labels in the correct regime context (trend-following in trending, mean-reversion in ranging) exploits a real edge — momentum and mean-reversion are the two most robust factors in finance.
 
 ### 5.3 Ruspini Partition and Membership Function Theory
 
@@ -613,7 +612,7 @@ Lopez de Prado's fractional differentiation applies a non-integer differencing o
   │     │         ┌───────────────────┘                         │
   │     │         ▼                                             │
   │     │    RegimeRouter (UNCHANGED)                           │
-  │     │    └── trending_up → primary_trend_signal             │
+  │     │    └── trending_up → trend_signal_model              │
   │     │              │                                        │
   │     │              ▼                                        │
   │     ├──▶ SIGNAL MODEL (from Phase 1-2) ──▶ SIDE = BUY        │
@@ -625,7 +624,7 @@ Lopez de Prado's fractional differentiation applies a non-integer differencing o
   │     │                              ▼                        │
   │     ├──▶ META-LABELER ──▶ P(profitable) = 0.73              │ ◀── NEW
   │     │    (secondary model, trained on triple barrier)        │
-  │     │    Input: primary signal + ALL features + regime       │
+  │     │    Input: signal model output + ALL features + regime   │
   │     │    + context + external data                          │
   │     │    Output: probability [0, 1]                         │
   │     │                              │                        │
@@ -673,8 +672,8 @@ Research consistently shows XGBoost/LightGBM outperform neural networks on tabul
 
 **What to measure:**
 
-| Metric | Direct Classification | Meta-Labeling (expected) |
-|--------|----------------------|--------------------------|
+| Metric | Signal Model Only | Signal Model + Meta-Labeler (expected) |
+|--------|-------------------|---------------------------------------|
 | Precision | Moderate | Higher (fewer false positives) |
 | Recall | Moderate | Lower (filtered) |
 | F1 score | Baseline | Higher (precision gain > recall loss) |
@@ -683,14 +682,14 @@ Research consistently shows XGBoost/LightGBM outperform neural networks on tabul
 | Avg trade size | Fixed | Variable (probability-weighted) |
 
 **What this experiment proves/disproves:**
-- If meta-labeling Sharpe >> direct → separating side/size is the right decomposition
-- If meta-labeling ≈ direct → the primary model lacks sufficient directional edge for meta-labeling to improve
-- If primary model recall < 30% → primary rules are too restrictive, need to loosen
+- If meta-labeling Sharpe >> signal-only → separating side/size is the right decomposition
+- If meta-labeling ≈ signal-only → the signal model lacks sufficient directional edge for meta-labeling to improve
+- If signal model recall < 30% → confidence threshold is too high, need to lower for more candidates
 
 #### Experiment 6: MLP vs LightGBM Meta-Labeler
 
 **Setup:**
-- Same primary model, same features, same labels
+- Same signal model, same features, same labels
 - Meta-labeler A: MLP [64, 32]
 - Meta-labeler B: LightGBM (100 trees, max_depth=5)
 
@@ -744,7 +743,8 @@ Research consistently shows XGBoost/LightGBM outperform neural networks on tabul
   │     │                                                 │
   │  Layer 2+: Standard MLP layers [128] → [64]           │
   │     │                                                 │
-  │  Output: P(profitable) or class probabilities         │
+  │  Output: TB class probabilities (signal model)         │
+  │    or P(profitable) (meta-labeler, if Phase 3)        │
   │                                                       │
   │  Training: backprop updates ALL parameters jointly     │
   │  - MF params (μ, σ) via ∂L/∂μ, ∂L/∂σ                │
@@ -790,17 +790,17 @@ These are insights no human would hand-code. The model discovers the market's ac
 
 **Integration with meta-labeling (Phase 3):**
 
-The learnable fuzzy layer works particularly well with meta-labeling:
-- Primary model uses FIXED fuzzy sets (expert-defined, stable, interpretable)
+The learnable fuzzy layer works particularly well with the Phase 3 architecture:
+- Signal model uses FIXED fuzzy sets (expert-defined, stable, interpretable)
 - Meta-labeler uses LEARNABLE fuzzy sets (data-driven, adaptive)
-- The primary model provides consistent signals; the meta-labeler optimizes filtering
+- The signal model provides consistent directional predictions; the meta-labeler optimizes filtering
 
-This separation keeps the primary model's interpretability while allowing the meta-labeler to discover hidden structure.
+This separation keeps the signal model's interpretability while allowing the meta-labeler to discover hidden structure. Alternatively, learnable MFs can be applied directly to the signal model (without Phase 3) to improve its directional accuracy.
 
 #### Experiment 7: Fixed vs Learnable MFs
 
 **Setup:**
-- Same model (meta-labeler from Phase 3)
+- Same model (signal model or meta-labeler — whichever is the current best performer)
 - Same labels (triple barrier)
 - Variant A: Fixed Gaussian MFs (expert-initialized)
 - Variant B: Learnable Gaussian MFs (percentile-initialized, end-to-end trained)
@@ -828,8 +828,8 @@ This separation keeps the primary model's interpretability while allowing the me
 **Advanced variant:** Train separate learnable MF parameters for each regime. The trend model's RSI "oversold" center may differ from the range model's.
 
 **Setup:**
-- Regime classifier routes to per-regime meta-labelers (Phase 3 architecture)
-- Each meta-labeler has its own learnable fuzzy layer
+- Regime classifier routes to per-regime models (signal models or meta-labelers)
+- Each per-regime model has its own learnable fuzzy layer
 - Compare: shared MFs vs per-regime MFs
 
 **Expected outcome:** Per-regime MFs should outperform shared MFs because market structure differs by regime. The model may discover that:
@@ -956,13 +956,13 @@ AUTORESEARCH YAML:
 
 **The most powerful autoresearch loop:**
 ```
-1. Agent designs primary rules + meta-labeler config with learnable MFs
+1. Agent designs signal model + meta-labeler config with learnable MFs
 2. Harness trains end-to-end (MFs + NN jointly)
 3. Agent reads learned MF parameters (μ, σ for each indicator)
 4. Agent observes: "RSI's 'oversold' center learned to be 35, not 30"
 5. Agent forms hypothesis: "the market's oversold level is higher than textbook"
-6. Agent updates primary rules: RSI < 35 instead of RSI < 30
-7. Re-run with new primary rules → better or worse?
+6. Agent updates signal model fuzzy set definitions to reflect learned centers
+7. Re-run with updated config → better or worse?
 8. Agent logs insight to confirmed_patterns.md
 ```
 
@@ -976,7 +976,7 @@ The agentic research system (design/assess/train/backtest cycle coordinated by t
 
 **Phase 2:** The design agent (which generates strategy YAMLs) gains new vocabulary. Instead of only generating fuzzy set boundaries, it can specify `type: gaussian`, `num_sets: 4`, and `include_raw: true`. The design prompt needs updating to include these options.
 
-**Phase 3:** The design agent's strategy YAML structure changes to include `primary_signal` and `meta_labeler` sections. The assessment agent evaluates precision/recall trade-offs, not just accuracy. The backtest harness reports win rate, average win/loss ratio, and position sizing statistics alongside Sharpe.
+**Phase 3:** The design agent's strategy YAML structure changes to include `signal_model` and `meta_labeler` sections. The assessment agent evaluates precision/recall trade-offs, not just accuracy. The backtest harness reports win rate, average win/loss ratio, and position sizing statistics alongside Sharpe.
 
 **Phase 4:** The design agent can specify `learnable: true` for fuzzy sets. After training, the assessment agent can read the learned MF parameters and include them in the assessment report. Over multiple research iterations, the system accumulates knowledge about optimal market partitioning across different regimes and instruments.
 
@@ -1047,13 +1047,15 @@ The agentic research system (design/assess/train/backtest cycle coordinated by t
                     Data-discovered partitions
                             │
                             ▼
-                    META-LABELER (MLP or LightGBM)
-                    P(profitable) → position size
+                    Signal Model or Meta-Labeler
+                    (learnable MFs enhance either)
                             │
                     Context gate adjusts threshold
                             │
                     Execute with sized position
 ```
+
+Note: Phase 4 can apply to signal models directly (without Phase 3) or to the meta-labeler if Phase 3 is implemented. The diagram above shows the general pattern.
 
 ---
 
@@ -1067,13 +1069,13 @@ The agentic research system (design/assess/train/backtest cycle coordinated by t
 
 **Honest assessment:** There IS theoretical reason to believe indicators predict TB outcomes better than point-in-time returns. ATR captures the volatility that determines barrier width. RSI captures the momentum that determines whether price hits TP or SL first. MACD captures trend strength which determines directional persistence. These are exactly the properties TB labels encode. But theory isn't proof — the experiments will tell us.
 
-### 9.2 Meta-Labeling Requires a Primary Model with Edge
+### 9.2 Meta-Labeling Requires Signal Models with Edge
 
-**Risk:** If our rule-based primary model (RSI oversold → BUY) has ~50% directional accuracy, meta-labeling cannot improve it. You can't filter randomness into signal.
+**Risk:** If the signal models from Phases 1-2 still have ~50% directional accuracy, meta-labeling cannot improve them. You can't filter randomness into signal.
 
-**Mitigation:** Our regime classifier works at 69-79%. "Trade with the trend in trending regimes" (momentum) and "mean-revert in ranging regimes" are the two most robust edges in financial markets. The primary model should have genuine directional accuracy if regime classification is correct.
+**Mitigation:** Our regime classifier works at 69-79%. Signal models trained on TB labels in the correct regime context (trend-following in trending, mean-reversion in ranging) should have genuine directional accuracy — these are the two most robust edges in financial markets.
 
-**Honest assessment:** Even if the primary model has 55% accuracy, meta-labeling should improve risk-adjusted returns by filtering the 45% of false positives. The key question is whether 55% accuracy after costs translates to positive expected value. With EURUSD forex costs at ~2 pips round trip, we need sufficient edge per trade.
+**Honest assessment:** Even if signal models achieve 55% accuracy, meta-labeling should improve risk-adjusted returns by filtering the 45% of false positives. The key question is whether 55% accuracy after costs translates to positive expected value. With EURUSD forex costs at ~2 pips round trip, we need sufficient edge per trade. **This is why Phase 3 is conditional on Phases 1-2 succeeding.**
 
 ### 9.3 Learnable MFs Might Overfit on Small Datasets
 
@@ -1140,7 +1142,7 @@ Phase 3: Meta-Labeling Enhancement (depends on Phases 1 + 2 succeeding)
   ├── Strategy YAML: signal + meta sections   [modify models.py]
   └── Autoresearch: two-section YAML support  [modify program.md]
 
-Phase 4: Learnable MFs / ANFIS (depends on Phase 2)
+Phase 4: Learnable MFs / ANFIS (depends on Phase 2; optionally enhances Phase 3)
   ├── LearnableFuzzyLayer (torch.nn.Module)   [new file, ~250 LOC]
   ├── Percentile-based initialization         [new utility, ~50 LOC]
   ├── Ruspini softmax enforcement             [in LearnableFuzzyLayer]
