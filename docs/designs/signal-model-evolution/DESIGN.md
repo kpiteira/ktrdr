@@ -1,4 +1,4 @@
-# Signal Model Evolution: From Regression Collapse to Adaptive Neuro-Fuzzy Meta-Labeling
+# Signal Model Evolution: From Regression Collapse to Adaptive Neuro-Fuzzy Trading
 
 ## Status: Design
 ## Date: 2026-03-14
@@ -8,11 +8,11 @@
 
 ## 1. Executive Summary
 
-The signal models in ktrdr's predictive features pipeline are fundamentally broken. Through empirical experiments and deep research, we've identified a cascade of three compounding failures: the target is noise, the features are sparse, and the training is under-equipped. No single fix addresses all three.
+The signal models in ktrdr's predictive features pipeline are fundamentally broken. Through empirical experiments and deep research, we've identified a cascade of three compounding failures: the target is noise, the features are sparse, and the training is under-equipped. No single fix addresses all three — **all three layers must be addressed.**
 
-This document proposes a four-phase evolution that restructures the signal generation pipeline from "predict forward returns" to "filter and size trade candidates." The changes preserve all working components (regime classifier, context classifier, ensemble router, context gate) while replacing the broken signal prediction with a more tractable approach grounded in quantitative finance literature.
+This document proposes a four-phase evolution that fixes each failure layer systematically while preserving all working components (regime classifier, context classifier, ensemble router, context gate). The signal models remain direct predictors of trade direction — but with a learnable target, full-spectrum features, a professional training pipeline, and an optional meta-labeling layer that adds trade filtering and position sizing on top.
 
-**The core insight: stop asking the neural network to predict returns. Start asking it to filter trades.**
+**The core insight: the signal models aren't broken because prediction is impossible. They're broken because they predict noise with sparse features using an under-equipped pipeline. Fix the target, fix the features, fix the training — and prediction becomes tractable. Then add filtering as an enhancement.**
 
 ---
 
@@ -34,7 +34,7 @@ Milestones M1 through M8 built a modular ensemble prediction system:
 
 The architecture works. The regime classifier identifies market states with genuine accuracy. The context classifier detects daily trend direction. The ensemble router dispatches to per-regime models. The context gate adjusts thresholds based on alignment.
 
-**The single broken link: the signal models that generate actual trade decisions.** Both `trend_regression_signal` and `range_regression_signal` collapse to predicting their training mean, producing constant outputs regardless of input.
+**The single broken link: the signal models that generate actual trade decisions.** Both `trend_regression_signal` and `range_regression_signal` collapse to predicting their training mean, producing constant outputs regardless of input. The signal models must be fixed — they are what generates trades. Without working signal models, the entire ensemble pipeline has no trade-generating capability.
 
 ---
 
@@ -47,6 +47,7 @@ The `ForwardReturnLabeler` computes `(close[t+h] - close[t]) / close[t]` with ho
 **We already learned this lesson with regime labeling.** In M7/M11, the original SER-based RegimeLabeler used a fixed horizon of 24 bars (1 day on 1H). It collapsed — 68%+ bars labeled RANGING because everything looks like noise at the wrong zoom level. The fix was the MultiScaleRegimeLabeler, which reads the market's own swing structure via ATR-scaled zigzag instead of using a fixed horizon. That fix worked: regime classification improved to 69-79% accuracy with balanced 4-class distribution.
 
 **But we never applied this lesson to the signal models.** The signal models still use `source: forward_return` with fixed short horizons. The same problem that plagued regime labeling — fixed horizon captures noise, not structure — is why signal models collapse to predicting the mean. The triple barrier method proposed in this document is the direct analogue of the MultiScaleRegimeLabeler for signal models: replace a fixed-horizon point-in-time label with a structure-aware, volatility-adaptive label.
+
 
 **Empirical measurements:**
 
@@ -226,10 +227,12 @@ Fixing any single layer alone won't help. A perfect training pipeline on noise t
   │                                                   │
   │ BROKEN (must fix)                                 │
   │                                                   │
-  │  ❌ ForwardReturnLabeler (noise target, SNR=0.002)│
-  │  ❌ Fuzzy set definitions (dead zones, Ruspini)   │
-  │  ❌ Training loop (no minibatch, early stop, etc) │
-  │  ❌ Signal model concept (predict returns → trade)│
+  │  ❌ L1: ForwardReturnLabeler (noise target, SNR=0.002) │
+  │  ❌ L2: Fuzzy set definitions (dead zones, Ruspini)   │
+  │  ❌ L3: Training loop (no minibatch, early stop, etc) │
+  │                                                       │
+  │  Signal models must remain trade generators —          │
+  │  fix all 3 layers so they can actually predict         │
   │                                                   │
   └──────────────────────────────────────────────────┘
 ```
@@ -356,9 +359,22 @@ From a comprehensive review of academic papers and practitioner literature (2020
 
 ## 6. Proposed Architecture Evolution
 
-### 6.1 Phase 1: Fix the Target (Triple Barrier Labeling + Training Improvements)
+**Phasing strategy:** Fix all three failure layers across Phases 1-2 (critical), then add enhancement layers in Phases 3-4. Signal models remain direct predictors throughout.
 
-**Goal:** Replace the noise target with a learnable one. Improve the training pipeline to handle it properly.
+| Phase | Layers Addressed | Signal Models... |
+|-------|-----------------|------------------|
+| Phase 1 | L1 (target) + L3 (training) | Predict TB outcomes instead of returns |
+| Phase 2 | L2 (features) — CRITICAL | See full input space, no dead zones |
+| Phase 3 | Enhancement | Generate candidates for meta-labeler filtering |
+| Phase 4 | Enhancement | Use learned market partitioning |
+
+### 6.1 Phase 1: Fix the Target + Training Pipeline (Layers 1 & 3)
+
+**Goal:** Replace the noise target with a learnable one AND upgrade the training pipeline to handle it properly. Signal models remain direct predictors — they predict triple barrier outcomes (will this trade hit take-profit, stop-loss, or expire?) instead of raw forward returns.
+
+**Why Layers 1 and 3 together:** A better target with the current full-batch, no-early-stopping, no-LR-scheduling pipeline won't converge properly. A better pipeline on the current noise target still learns noise. These two fixes are complementary and should ship together.
+
+**What changes for signal models:** Instead of `predicted_return ≈ 0.0001` (constant), signal models output `P(take-profit) = 0.72, P(stop-loss) = 0.18, P(expire) = 0.10`. The model learns to predict achievable trade outcomes — a genuinely tractable classification problem. The signal model remains the thing that generates trades.
 
 #### Architecture After Phase 1
 
@@ -453,9 +469,11 @@ The autoresearch harness (PR #352) can execute this experiment directly. Modify 
 
 **Risk:** Smaller training set may cause overfitting. Monitor train/val gap closely.
 
-### 6.2 Phase 2: Fix the Features (Hybrid Encoding + Gaussian MFs)
+### 6.2 Phase 2: Fix the Features — CRITICAL (Layer 2)
 
-**Goal:** Eliminate fuzzy dead zones. Give the NN full visibility of the input space.
+**Goal:** Eliminate fuzzy dead zones. Give the NN full visibility of the input space. This is critical — even with perfect labels and a great training pipeline, a model that can't see 50% of its input space cannot learn effectively.
+
+**Why this is critical, not optional:** The dead zone problem means that for 39.8% of bars (RSI alone), the model receives zero input from RSI. For BBWidth, 99.7% of bars produce zero. On average, 5.1 of 8 features are zero at any given bar. The model is effectively blind most of the time. No amount of label or pipeline improvement can compensate for missing input data.
 
 #### Architecture After Phase 2
 
@@ -568,9 +586,13 @@ Lopez de Prado's fractional differentiation applies a non-integer differencing o
 
 **What to measure:** Does adding frac-diff features improve val accuracy? If yes, it suggests the NN can extract time-series memory that standard indicators miss.
 
-### 6.3 Phase 3: Meta-Labeling Architecture
+### 6.3 Phase 3: Meta-Labeling Enhancement (Optional Layer on Top of Working Prediction)
 
-**Goal:** Separate trade direction (side) from trade quality (size). Let the regime classifier and simple rules handle direction; train a meta-labeler to filter and size.
+**Goal:** Add a secondary filtering and position-sizing layer ON TOP of the working signal models from Phases 1-2. The signal models continue to generate trade candidates (direction prediction). The meta-labeler decides WHICH of those candidates to take and HOW MUCH to bet.
+
+**Why this is an enhancement, not a replacement:** After Phases 1-2, signal models should be generating meaningful trade signals. Meta-labeling improves risk-adjusted returns by filtering out low-quality signals and sizing positions by confidence. It does NOT replace the signal models — it refines their output. Both direction prediction AND trade filtering work together.
+
+**Prerequisite:** Phase 3 only makes sense if Phases 1-2 produce signal models with >50% directional accuracy. If the signal models still predict randomly after fixing targets and features, meta-labeling cannot create edge from nothing.
 
 #### Architecture After Phase 3
 
@@ -594,11 +616,11 @@ Lopez de Prado's fractional differentiation applies a non-integer differencing o
   │     │    └── trending_up → primary_trend_signal             │
   │     │              │                                        │
   │     │              ▼                                        │
-  │     ├──▶ PRIMARY SIGNAL MODEL ──▶ SIDE = BUY candidate      │
-  │     │    (rule-based or light ML)                           │ ◀── NEW
-  │     │    RSI < 30 in ranging → BUY                          │
-  │     │    ADX > 25 + MACD bullish in trending → BUY          │
-  │     │    High recall, accepts false positives                │
+  │     ├──▶ SIGNAL MODEL (from Phase 1-2) ──▶ SIDE = BUY        │
+  │     │    (TB-trained classifier, Gaussian MFs)              │
+  │     │    P(take-profit) > threshold → BUY candidate         │
+  │     │    High recall config: lower threshold to catch more  │
+  │     │    Generates trade candidates with direction          │
   │     │                              │                        │
   │     │                              ▼                        │
   │     ├──▶ META-LABELER ──▶ P(profitable) = 0.73              │ ◀── NEW
@@ -627,24 +649,27 @@ Lopez de Prado's fractional differentiation applies a non-integer differencing o
 ```
 
 **Key changes:**
-1. Signal models split into Primary (side) + Meta-Labeler (filter/size)
-2. Primary models can be rule-based (no ML needed for simple patterns)
-3. Meta-labeler is a separate model trained on triple barrier labels
+1. Signal models (from Phases 1-2) serve as primary trade generators — they predict direction
+2. Meta-labeler added as a secondary model that filters and sizes the signal model's output
+3. Both models trained on triple barrier labels but with different objectives: signal model optimizes recall (catch opportunities), meta-labeler optimizes precision (filter false positives)
 4. Position sizing integrated — meta-labeler probability → bet size
 5. Context gate adjusts meta-labeler confidence threshold (M8 mechanism preserved)
+6. The system now has BOTH direction prediction (signal model) AND trade filtering (meta-labeler)
+
+**Architecture compatibility:**
+
+The meta-labeler is just another "model" in the ensemble. Its `output_type` would be `meta_label` (probability), loaded and called via the same `ModelBundle` / `DecisionFunction` interface. The signal model generates BUY/SELL candidates; the meta-labeler receives those candidates plus enriched features (regime probabilities, context scores, external data) and outputs P(profitable).
 
 **Why tree-based meta-labelers may outperform NNs here:**
 
-Research consistently shows XGBoost/LightGBM outperform neural networks on tabular financial data with small-to-medium datasets. The meta-labeler's input is tabular (indicator values, regime probabilities, context scores). We should benchmark both MLP and LightGBM meta-labelers.
+Research consistently shows XGBoost/LightGBM outperform neural networks on tabular financial data with small-to-medium datasets. The meta-labeler's input is tabular. We should benchmark both MLP and LightGBM meta-labelers.
 
-This is compatible with the existing architecture: the meta-labeler is just another "model" in the ensemble. Its `output_type` would be `meta_label` (probability), loaded and called via the same `ModelBundle` / `DecisionFunction` interface.
-
-#### Experiment 5: Meta-Labeling vs Direct Classification
+#### Experiment 5: Signal Model Alone vs Signal Model + Meta-Labeler
 
 **Setup:**
 - Same features, same data
-- Variant A: Direct 3-class classification (Phase 1 model)
-- Variant B: Primary rule model (RSI oversold/overbought) + meta-labeler
+- Variant A: Signal model only (Phase 1-2 classifier, acts directly)
+- Variant B: Signal model (high-recall config) + meta-labeler (filters + sizes)
 
 **What to measure:**
 
@@ -878,34 +903,35 @@ MEANINGFUL interactions:
 
 #### After Phase 3 (Meta-Labeling):
 
-The research model fundamentally changes from "find the right strategy" to "find the right filter":
+The research model gains a decomposed optimization structure:
 
 ```
 AUTORESEARCH YAML evolves from:
-  strategy → indicators → fuzzy → NN → predict
+  strategy → indicators → fuzzy → NN → predict (single monolithic model)
 
 TO a two-section file:
-  primary_signal:
-    type: rule_based
-    rules:
-      trending: [adx > 25, macd_bullish]
-      ranging: [rsi < 30 OR stoch < 20]
-    ← Agent mutates rules (simple, interpretable)
+  signal_model:
+    indicators: [rsi, adx, macd, stoch]
+    fuzzy_sets: {gaussian, 3-4 sets each}
+    nn_architecture: [128, 64]
+    labels: {source: triple_barrier, pt: 2.0, sl: 1.5}
+    confidence_threshold: 0.6          ← lower = more candidates
+    ← Agent mutates model config for high-recall direction prediction
 
   meta_labeler:
     features: [all_indicators, regime_probs, context_probs]
     model: [mlp | lightgbm]
     architecture: [...]
-    ← Agent mutates ML configuration
+    ← Agent mutates filtering config for high-precision trade selection
 ```
 
 **Expected impact on autoresearch:**
 1. The agent optimizes TWO things independently (decomposed problem)
-2. Primary rules are simple enough for the agent to reason about ("RSI < 30 means oversold")
-3. Meta-labeler tuning has higher leverage per experiment (each parameter affects filtering, not direction)
-4. The agent can discover that certain primary rules work better in certain regimes
+2. Signal model optimization focuses on catching real opportunities (recall)
+3. Meta-labeler optimization focuses on filtering false positives (precision)
+4. The agent can discover that certain signal model configs work better in certain regimes
 
-**Key insight for the research model:** The agent's hypothesis space becomes more structured. Instead of "try RSI period 21 instead of 14" (vague), the agent reasons "the primary model catches 80% of real opportunities but 60% are false positives — the meta-labeler needs to improve precision on ranging-regime BUY signals." This is a much more tractable optimization problem.
+**Key insight for the research model:** The agent's hypothesis space becomes more structured. Instead of "try RSI period 21 instead of 14" (vague), the agent reasons "the signal model catches 80% of real opportunities but 60% are false positives — the meta-labeler needs to improve precision on ranging-regime BUY signals." This is a much more tractable optimization problem, with both prediction and filtering as separate levers.
 
 #### After Phase 4 (Learnable MFs):
 
@@ -966,48 +992,52 @@ The agentic research system (design/assess/train/backtest cycle coordinated by t
                                     BROKEN ◀─────────────────┘
 ```
 
-### After Phase 1
+### After Phase 1 (Layers 1 & 3 Fixed)
 
 ```
   OHLCV → Indicators → Fixed Fuzzy (dead zones) → MLP → Classify TB Outcome
                                                               │
                         TB labeling creates learnable target   │
-                        Training pipeline upgraded             │
-                        Classification > regression ──────────┘
+                        Training: mini-batch, early stopping,  │
+                        LR scheduling, gradient clipping       │
+                        Signal models PREDICT direction ───────┘
 ```
 
-### After Phase 2
+### After Phase 2 (Layer 2 Fixed — Critical)
 
 ```
   OHLCV → Indicators → Gaussian Fuzzy (no dead zones) ─┐
                     └── Raw Normalized ─────────────────┤→ MLP → Classify TB
                                                         │
-            Hybrid encoding eliminates blind spots       │
-            Ruspini partition satisfied ─────────────────┘
+            Dead zones eliminated (was 50%+ blind)       │
+            Ruspini partition satisfied                  │
+            Signal models now see FULL input space ──────┘
 ```
 
-### After Phase 3
+### After Phase 3 (Enhancement Layer)
 
 ```
   OHLCV → Indicators ─┬── Regime Classifier ──── Route
                        ├── Context Classifier ─── Gate
-                       ├── Primary Rules ──────── SIDE (BUY/SELL candidate)
+                       ├── Signal Model (TB) ──── SIDE (BUY/SELL candidate)
+                       │   (direction prediction)
                        └── Gaussian Fuzzy + Raw ─┐
                                                   │
                             Meta-Labeler ◀────────┘
-                            P(profitable) → position size
+                            FILTER: P(profitable) → size
                                     │
+                        Both prediction AND filtering
                         Context gate adjusts threshold
                                     │
                             Execute with sized position
 ```
 
-### After Phase 4
+### After Phase 4 (Learnable MFs / ANFIS)
 
 ```
   OHLCV → Indicators ─┬── Regime Classifier ──── Route
                        ├── Context Classifier ─── Gate
-                       ├── Primary Rules ──────── SIDE
+                       ├── Signal Model (TB) ──── SIDE
                        └── Raw Values ──┐
                                         │
                             ┌───────────┘
@@ -1079,18 +1109,21 @@ The agentic research system (design/assess/train/backtest cycle coordinated by t
 ## 10. Implementation Priority and Dependencies
 
 ```
-Phase 1: Fix the Target
+Phase 1: Fix the Target + Training Pipeline (Layers 1 & 3 — CRITICAL)
   ├── TripleBarrierLabeler                    [new file, ~200 LOC]
   ├── CUSUMFilter                             [new file, ~80 LOC]
   ├── UniquenessWeighting                     [new file, ~100 LOC]
-  ├── Training pipeline: mini-batch + early stopping  [modify mlp.py]
+  ├── Training pipeline: mini-batch SGD       [modify mlp.py]
+  ├── Training pipeline: early stopping       [modify mlp.py]
   ├── Training pipeline: LR scheduling        [modify mlp.py]
+  ├── Training pipeline: gradient clipping    [modify mlp.py]
   ├── Training pipeline: focal loss           [new loss class]
+  ├── Training pipeline: label purging        [modify training_pipeline.py]
   ├── Strategy YAML: source: triple_barrier   [modify training_pipeline.py]
   ├── DecisionFunction: classification path   [already exists, verify]
   └── Autoresearch harness update             [modify harness.py if needed]
 
-Phase 2: Fix the Features (can partially overlap with Phase 1)
+Phase 2: Fix the Features (Layer 2 — CRITICAL, can partially overlap with Phase 1)
   ├── Gaussian MF in strategy YAMLs           [YAML change only]
   ├── 3+ sets per indicator                   [YAML change only]
   ├── Hybrid encoding in FuzzyNeuralProcessor [modify ~20 LOC]
@@ -1098,16 +1131,16 @@ Phase 2: Fix the Features (can partially overlap with Phase 1)
   ├── Strategy YAML: raw_indicator nn_input   [modify models.py]
   └── FeatureResolver: handle raw indicators  [modify feature_resolver.py]
 
-Phase 3: Meta-Labeling (depends on Phase 1)
-  ├── PrimarySignalGenerator                  [new file, ~150 LOC]
+Phase 3: Meta-Labeling Enhancement (depends on Phases 1 + 2 succeeding)
   ├── MetaLabeler model                       [new model class, ~200 LOC]
   ├── LightGBM meta-labeler variant           [new file, ~150 LOC]
   ├── PositionSizer                           [new file, ~80 LOC]
+  ├── Signal model high-recall config         [YAML config change]
   ├── Ensemble runner: meta-label integration [modify ensemble_runner.py]
-  ├── Strategy YAML: primary + meta sections  [modify models.py]
+  ├── Strategy YAML: signal + meta sections   [modify models.py]
   └── Autoresearch: two-section YAML support  [modify program.md]
 
-Phase 4: Learnable MFs (depends on Phase 2 + 3)
+Phase 4: Learnable MFs / ANFIS (depends on Phase 2)
   ├── LearnableFuzzyLayer (torch.nn.Module)   [new file, ~250 LOC]
   ├── Percentile-based initialization         [new utility, ~50 LOC]
   ├── Ruspini softmax enforcement             [in LearnableFuzzyLayer]
@@ -1121,26 +1154,32 @@ Phase 4: Learnable MFs (depends on Phase 2 + 3)
 
 ## 11. Success Criteria
 
-### Phase 1 Success
+### Phase 1 Success (Layers 1 & 3)
 
 - [ ] Triple barrier labeler produces labels with class distribution within 20/60/20 to 40/20/40 range
 - [ ] Model val accuracy > 55% (above the no-information rate for 3 classes)
 - [ ] Hidden layer activations are non-zero (model uses features, not just bias)
+- [ ] Training converges with early stopping (not running all epochs)
+- [ ] Mini-batch training shows train/val gap < 10% (generalization)
+- [ ] Signal models generate directional trade decisions (not constant output)
 - [ ] Backtest Sharpe > 0.3 on validation window (2024)
 - [ ] Autoresearch agent can search barrier parameters and find improving configurations
 
-### Phase 2 Success
+### Phase 2 Success (Layer 2 — Critical)
 
-- [ ] Zero dead-zone bars across all indicators
+- [ ] Zero dead-zone bars across all indicators (currently 39.8-99.7%)
+- [ ] Average features-at-zero per bar drops from 5.1/8 to 0/N
 - [ ] Val accuracy improves vs Phase 1 baseline (same labels, better features)
 - [ ] Hybrid encoding outperforms fuzzy-only (or demonstrates equivalence, validating fuzzy)
+- [ ] Ruspini partition satisfied: membership values sum to ~1.0 at every point
 
-### Phase 3 Success
+### Phase 3 Success (Enhancement Layer)
 
 - [ ] Meta-labeler precision > 60% (majority of taken trades are profitable)
+- [ ] Sharpe improves vs Phase 2 signal-model-only baseline (meta-labeling adds value)
 - [ ] Sharpe > 0.5 on validation window
 - [ ] Position sizing produces risk-adjusted improvement vs fixed sizing
-- [ ] Autoresearch agent independently discovers useful primary rules
+- [ ] Signal model + meta-labeler outperforms signal model alone (validates the enhancement)
 
 ### Phase 4 Success
 
