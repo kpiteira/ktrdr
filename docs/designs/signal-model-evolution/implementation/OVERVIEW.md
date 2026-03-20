@@ -1,3 +1,7 @@
+---
+design: docs/designs/signal-model-evolution/DESIGN.md
+---
+
 # Signal Model Evolution — Implementation Plan
 
 ## Design Reference
@@ -6,15 +10,15 @@
 
 ## Milestone Summary
 
-| Milestone | Name | Tasks | Phase | Dependencies |
-|-----------|------|-------|-------|-------------|
-| M1 | Triple Barrier Labeler | 5 | Phase 1 (Layer 1) | None |
-| M2 | Training Pipeline Upgrades | 5 | Phase 1 (Layer 3) | None |
-| M3 | Phase 1 Integration + Validation | 5 | Phase 1 | M1, M2 |
-| M4 | Gaussian MFs + Hybrid Encoding | 5 | Phase 2 (Layer 2) | None |
-| M5 | Combined Validation + Experiments | 4 | Phase 1+2 | M3, M4 |
-| M6 | Meta-Labeling Enhancement | 5 | Phase 3 | M5 (conditional) |
-| M7 | Learnable MFs / ANFIS | 5 | Phase 4 | M5 (conditional) |
+| Milestone | Name | Tasks | Phase | Dependencies | JTBD |
+|-----------|------|-------|-------|-------------|------|
+| M1 | Triple Barrier Labeler | 5 | Phase 1 (Layer 1) | None | Train signal models on trade-outcome labels instead of noisy forward returns |
+| M2 | Training Pipeline Upgrades | 5 | Phase 1 (Layer 3) | None | Train models that generalize instead of collapsing to predict the mean |
+| M3 | Phase 1 Integration + Validation | 5 | Phase 1 | M1, M2 | Run a signal model trained with TB labels through the ensemble backtest and measure if it beats the forward-return baseline |
+| M4 | Gaussian MFs + Hybrid Encoding | 5 | Phase 2 (Layer 2) | None | Eliminate dead-zone features so models receive non-zero input on every bar |
+| M5 | Combined Validation + Experiments | 4 | Phase 1+2 | M3, M4 | Run the full evolved pipeline (TB + Gaussian + upgraded training) end-to-end and measure whether all three fixes compound into >55% accuracy and Sharpe >0.3 |
+| M6 | Meta-Labeling Enhancement | 5 | Phase 3 | M5 (conditional) | Filter low-confidence trades and size positions by probability to improve Sharpe without increasing trade count |
+| M7 | Learnable MFs / ANFIS | 5 | Phase 4 | M5 (conditional) | Let the model discover optimal market-structure boundaries instead of relying on expert-defined MF parameters |
 
 **Total:** 34 tasks across 7 milestones
 

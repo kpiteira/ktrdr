@@ -8,6 +8,8 @@ design: docs/designs/signal-model-evolution/DESIGN.md
 **Dependencies:** M3 (Phase 1 Integration), M4 (Gaussian MFs + Hybrid)
 **Branch:** `impl/sme-M5-combined-validation` (from main, after M3+M4 merged)
 
+**JTBD:** *When all three layers are fixed (TB labels + Gaussian MFs + upgraded training), I want to run the full ensemble backtest on 2024 data and compare against the forward-return baseline, so that I can confirm the fixes compound into >55% accuracy and Sharpe >0.3 — and make a go/no-go decision for Phases 3-4.*
+
 ---
 
 ## Task 5.1: Ensemble Config with TB Signal Models
@@ -130,19 +132,22 @@ Execute Design Experiment 1 in full: compare TB-trained signal models (with all 
 **Estimated time:** 3 hours
 
 **Description:**
-Full end-to-end validation: train TB signal models with Gaussian MFs + hybrid encoding + upgraded training pipeline, then run ensemble backtest (regime-only and context-gated), comparing against forward-return baseline. This validates all three layers are fixed and working together.
+Full end-to-end validation: train TB signal models with Gaussian MFs + hybrid encoding + upgraded training pipeline, then run ensemble backtest (regime-only and context-gated), comparing against forward-return baseline. This validates all three layers are fixed and working together. This is the definitive go/no-go gate for Phases 3-4.
 
 **Validation Steps:**
 1. Load the `ke2e` skill before designing validation
-2. Use `ke2e-test-scout` to search for existing tests covering ensemble backtesting with classification signal models
-3. Design a comprehensive test (via `ke2e-test-designer` if needed) that:
-   a. Verifies trained TB models exist and load correctly
-   b. Runs regime-only ensemble backtest with TB models on EURUSD 1h 2024
-   c. Runs context-gated ensemble backtest with TB models on same data
-   d. Verifies signal models produce varied output (not constant)
-   e. Compares trade count, win rate, Sharpe vs forward-return baseline
-   f. Checks context gate has observable effect (context-gated ≠ regime-only)
-4. Execute via `ke2e-test-runner`
+2. Use `ke2e-test-scout` to search for existing tests covering ensemble backtesting with classification signal models, or combined training+backtest pipelines
+3. If no match found, hand off to `ke2e-test-designer` to design a new test that:
+   a. Starts the sandbox (`uv run kinfra sandbox up`)
+   b. Trains trend and range TB signal models with Gaussian+hybrid strategies via CLI
+   c. Runs regime-only ensemble backtest on EURUSD 1h 2024 via CLI
+   d. Runs context-gated ensemble backtest on same data via CLI
+   e. Runs forward-return baseline ensemble backtest for comparison
+   f. Compares: trade count, win rate, Sharpe, signal diversity across all three
+   g. Verifies context gate has observable effect (different trade count regime-only vs context-gated)
+4. Execute the test via `ke2e-test-runner` against the real sandbox
+
+**What "real E2E" means here:** Full workflow: real training producing real model files, followed by real ensemble backtests producing real trade logs with measurable metrics. Three distinct backtest runs compared side-by-side. This is the most comprehensive validation in the plan.
 
 **Success Criteria (from Design Section 11 — combined Phase 1+2):**
 - [ ] Signal models generate directional trade decisions (not constant output)

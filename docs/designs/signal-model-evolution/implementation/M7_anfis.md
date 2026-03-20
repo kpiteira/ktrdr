@@ -8,6 +8,8 @@ design: docs/designs/signal-model-evolution/DESIGN.md
 **Dependencies:** M5 (Combined Validation) — requires Gaussian MFs working; optionally enhanced by M6
 **Branch:** `impl/sme-M7-anfis`
 
+**JTBD:** *When I train signal models with Gaussian MFs, I want the MF parameters (μ, σ) to be learnable via backpropagation, so that the model discovers optimal market-structure boundaries instead of relying on my expert guesses — and I can inspect what it learned.*
+
 ---
 
 ## Task 7.1: LearnableFuzzyLayer
@@ -212,13 +214,15 @@ Execute Design Experiments 7 and 8: Fixed vs Learnable MFs, and Per-Regime Learn
 
 **Validation Steps:**
 1. Load the `ke2e` skill before designing validation
-2. Use `ke2e-test-scout` to search for existing tests covering learnable fuzzy or ANFIS
-3. Design a test (via `ke2e-test-designer` if needed) that:
-   a. **Experiment 7**: Train two models on same data — one with fixed Gaussian MFs, one with learnable MFs. Compare val accuracy.
-   b. **Experiment 8**: Compare learned MF parameters between trend model and range model. Do they specialize?
-   c. Inspect learned parameters: do μ values shift from expert priors? How far?
-   d. Stability check: train on two different windows, compare learned params (consistent or overfit?)
-4. Execute via `ke2e-test-runner`
+2. Use `ke2e-test-scout` to search for existing tests covering learnable fuzzy, ANFIS, or MF parameter learning
+3. If no match found, hand off to `ke2e-test-designer` to design a new test that:
+   a. Starts the sandbox (`uv run kinfra sandbox up`)
+   b. **Experiment 7**: Train two models via CLI on same EURUSD 1h data — one with `learnable_fuzzy.enabled: false` (fixed Gaussian), one with `learnable_fuzzy.enabled: true`. Compare val accuracy.
+   c. **Experiment 8**: Train trend and range models both with learnable MFs. Inspect learned μ/σ parameters — do they differ between regimes?
+   d. Stability check: train learnable MF model on 2020-2022 and 2021-2023, compare learned params
+4. Execute the test via `ke2e-test-runner` against the real sandbox
+
+**What "real E2E" means here:** Real training runs producing real model files with inspectable learned parameters. The test reads saved model metadata to compare μ/σ values against initialization — not synthetic parameter updates.
 
 **Success Criteria (from Design Section 11 — Phase 4):**
 - [ ] Learned MF parameters differ meaningfully from expert initialization

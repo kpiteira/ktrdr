@@ -8,6 +8,8 @@ design: docs/designs/signal-model-evolution/DESIGN.md
 **Dependencies:** None (can run in parallel with M1 and M2)
 **Branch:** `impl/sme-M4-gaussian-hybrid`
 
+**JTBD:** *When I fuzzify indicator values for neural network input, I want Gaussian MFs with 3 overlapping sets plus raw indicator values (hybrid encoding), so that the model receives non-zero features on every bar instead of 5.1/8 features at zero.*
+
 ---
 
 ## Task 4.1: NNInputSpec Extension for Raw Indicators
@@ -237,15 +239,16 @@ Validate that Gaussian MFs + hybrid encoding eliminate dead zones. This directly
 
 **Validation Steps:**
 1. Load the `ke2e` skill before designing validation
-2. Use `ke2e-test-scout` to search for existing dead-zone or fuzzy encoding tests
-3. Design a test (via `ke2e-test-designer` if needed) that:
-   a. Loads EURUSD 1h data
-   b. Computes fuzzy memberships with OLD config (2-set triangular) and NEW config (3-set Gaussian)
-   c. Measures dead zone % per indicator: what fraction of bars have all-zero memberships
-   d. Measures average features-at-zero per bar
-   e. With hybrid encoding: verifies raw indicators are always non-zero (after normalization)
-   f. Optionally trains a model with both encodings to measure activation differences
-4. Execute via `ke2e-test-runner`
+2. Use `ke2e-test-scout` to search for existing tests covering dead-zone measurement, fuzzy encoding quality, or feature sparsity
+3. If no match found, hand off to `ke2e-test-designer` to design a new test that:
+   a. Starts the sandbox (`uv run kinfra sandbox up`)
+   b. Trains a model using the OLD strategy (2-set triangular MFs) and inspects feature tensor for zero values
+   c. Trains a model using the NEW strategy (3-set Gaussian + hybrid encoding) and inspects feature tensor for zero values
+   d. Compares: dead zone % per indicator, average features-at-zero per bar
+   e. Verifies hybrid encoding's raw indicators are always non-zero
+4. Execute the test via `ke2e-test-runner` against the real sandbox
+
+**What "real E2E" means here:** Real training runs with real EURUSD data using both old and new strategy YAMLs. The test measures feature tensor characteristics from actual training logs, not synthetic data.
 
 **Success Criteria (from Design Section 11 — Phase 2):**
 - [ ] Zero dead-zone bars across all indicators (currently 39.8-99.7%)

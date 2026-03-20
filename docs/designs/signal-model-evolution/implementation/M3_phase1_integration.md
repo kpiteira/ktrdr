@@ -8,6 +8,8 @@ design: docs/designs/signal-model-evolution/DESIGN.md
 **Dependencies:** M1 (Triple Barrier Labeler), M2 (Training Pipeline)
 **Branch:** `impl/sme-M3-phase1-integration` (from main, after M1+M2 merged)
 
+**JTBD:** *When I have TB labels and an upgraded training pipeline, I want to wire them together end-to-end and run Experiment 1 (TB vs forward-return baseline), so that I can measure whether fixing Layers 1+3 produces signal models that actually learn (val accuracy >55%, Sharpe >0.3).*
+
 ---
 
 ## Task 3.1: Label Purging for Cross-Validation
@@ -185,19 +187,18 @@ Execute Design Experiment 1: Triple Barrier vs Forward Return Baseline. This is 
 
 **Validation Steps:**
 1. Load the `ke2e` skill before designing validation
-2. Use `ke2e-test-scout` to search for existing tests covering signal model training + backtest
-3. Design a test (via `ke2e-test-designer` if needed) that:
-   a. Trains two signal models on EURUSD 1h (2020-2023), same indicators (RSI/ADX/MACD/ROC), same architecture ([64,32]):
-      - Model A: `source: forward_return` (baseline, current behavior)
-      - Model B: `source: triple_barrier` with M2 training improvements
-   b. Runs ensemble backtest on 2024 validation data for both
-   c. Compares:
-      - Training loss convergence (does TB model show gradual improvement vs instant mean collapse?)
-      - Val accuracy (>55% for TB vs ~50% for forward return)
-      - Hidden layer activations (are they non-zero for TB model?)
-      - Backtest Sharpe ratio (>0.3 for TB model)
-      - Trade count and quality
-4. Execute via `ke2e-test-runner`
+2. Use `ke2e-test-scout` to search for existing tests covering signal model training + ensemble backtest comparison
+3. If no match found, hand off to `ke2e-test-designer` to design a new test that:
+   a. Starts the sandbox (`uv run kinfra sandbox up`)
+   b. Trains two signal models on EURUSD 1h (2020-2023) via CLI, same indicators, same architecture:
+      - Model A: `source: forward_return` (baseline)
+      - Model B: `source: triple_barrier` with all M2 improvements
+   c. Runs ensemble backtest on 2024 data for both via CLI
+   d. Compares real output: val accuracy, Sharpe, trade count, signal diversity
+   e. Produces a comparison table (the test should output metrics side by side)
+4. Execute the test via `ke2e-test-runner` against the real sandbox
+
+**What "real E2E" means here:** Two real training runs producing two real model files, followed by two real backtest runs with measurable trade counts and Sharpe ratios. No mocked models, no synthetic data.
 
 **Success Criteria (from Design Section 11 — Phase 1):**
 - [ ] Model val accuracy > 55% (above no-information rate for 3 classes)

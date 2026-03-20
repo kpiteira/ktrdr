@@ -8,6 +8,8 @@ design: docs/designs/signal-model-evolution/DESIGN.md
 **Dependencies:** None (can run in parallel with M1 and M4)
 **Branch:** `impl/sme-M2-training-pipeline`
 
+**JTBD:** *When I train a neural network, I want mini-batch SGD with early stopping, LR scheduling, gradient clipping, and focal loss, so that models generalize instead of collapsing to predict the mean.*
+
 ---
 
 ## Task 2.1: Mini-Batch Training
@@ -185,17 +187,19 @@ Implement Focal Loss for handling class imbalance in TB labels. Standard CrossEn
 **Estimated time:** 2 hours
 
 **Description:**
-Validate that all training pipeline improvements work together correctly: mini-batch + early stopping + LR scheduling + gradient clipping + focal loss. Train a model with these improvements and verify convergence behavior.
+Validate that all training pipeline improvements work together correctly: mini-batch + early stopping + LR scheduling + gradient clipping + focal loss. Train a real model and verify convergence behavior.
 
 **Validation Steps:**
 1. Load the `ke2e` skill before designing validation
-2. Use `ke2e-test-scout` to find existing tests covering training pipeline behavior
-3. If no match, use `ke2e-test-designer` to design a test that:
-   - Trains a classification model (can use existing zigzag labels for this validation — TB labels are M1's concern)
-   - Enables all improvements: mini-batch (256), early stopping (patience=10), LR scheduling, gradient clipping (1.0), focal loss
-   - Verifies: training stops before max_epochs (early stopping works), LR decreases at least once, no NaN losses, best model restored
-   - Compares val_accuracy vs same config without improvements
-4. Execute via `ke2e-test-runner`
+2. Use `ke2e-test-scout` to find existing tests covering training pipeline convergence or early stopping
+3. If no match found, hand off to `ke2e-test-designer` to design a new test that:
+   a. Starts the sandbox (`uv run kinfra sandbox up`)
+   b. Trains a classification model via CLI with all improvements enabled (strategy YAML with: `batch_size: 256`, `early_stopping: true`, `patience: 10`, `lr_scheduler: true`, `gradient_clip: 1.0`, `loss: focal`)
+   c. Inspects training output/logs for: early stopping triggered before max_epochs, LR reduction observed, no NaN losses, final model accuracy
+   d. Trains a second model with improvements disabled for comparison
+4. Execute the test via `ke2e-test-runner` against the real sandbox
+
+**What "real E2E" means here:** Real training run through the CLI, producing a real saved model. The test inspects training logs and model metadata to verify convergence behavior — not mock training loops.
 
 **Success Criteria (from Design Section 11):**
 - [ ] Training converges with early stopping (does not run all epochs)

@@ -8,6 +8,8 @@ design: docs/designs/signal-model-evolution/DESIGN.md
 **Dependencies:** M5 (Combined Validation) — proceed only if signal model accuracy > 55%
 **Branch:** `impl/sme-M6-meta-labeling`
 
+**JTBD:** *When I have a working signal model (>55% accuracy), I want to add a meta-labeler that predicts P(profitable) for each trade candidate and sizes positions by confidence, so that I improve Sharpe by filtering bad trades rather than generating more signals.*
+
 **Prerequisite:** Phase 3 only makes sense if Phases 1-2 produce signal models with >50% directional accuracy. If the signal models still predict randomly after fixing targets and features, meta-labeling cannot create edge from nothing.
 
 ---
@@ -206,14 +208,17 @@ Execute Design Experiment 5: Signal Model Alone vs Signal Model + Meta-Labeler. 
 
 **Validation Steps:**
 1. Load the `ke2e` skill before designing validation
-2. Use `ke2e-test-scout` to search for existing tests covering meta-labeling or trade filtering
-3. Design a test (via `ke2e-test-designer` if needed) that:
-   a. Runs ensemble backtest WITHOUT meta-labeler (signal model only — M5 baseline)
-   b. Trains meta-labeler (both MLP and LightGBM variants) on 2020-2023 data
-   c. Runs ensemble backtest WITH meta-labeler on 2024 data
-   d. Compares: Sharpe, precision, recall, win rate, trade count, position sizing impact
-   e. Compares MLP vs LightGBM meta-labeler (Experiment 6)
-4. Execute via `ke2e-test-runner`
+2. Use `ke2e-test-scout` to search for existing tests covering meta-labeling, trade filtering, or position sizing
+3. If no match found, hand off to `ke2e-test-designer` to design a new test that:
+   a. Starts the sandbox (`uv run kinfra sandbox up`)
+   b. Runs ensemble backtest WITHOUT meta-labeler via CLI (signal model only — M5 baseline)
+   c. Trains MLP meta-labeler on 2020-2023 data via CLI
+   d. Trains LightGBM meta-labeler on same data
+   e. Runs ensemble backtest WITH each meta-labeler on 2024 data via CLI
+   f. Compares: Sharpe, precision, win rate, trade count across all three variants
+4. Execute the test via `ke2e-test-runner` against the real sandbox
+
+**What "real E2E" means here:** Real backtest runs with and without meta-labeler producing real trade logs. Three comparison points: no meta-labeler, MLP meta-labeler, LightGBM meta-labeler — all on the same 2024 data window.
 
 **Success Criteria (from Design Section 11 — Phase 3):**
 - [ ] Meta-labeler precision > 60% (majority of taken trades are profitable)

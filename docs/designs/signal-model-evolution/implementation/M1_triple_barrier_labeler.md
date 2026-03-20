@@ -8,6 +8,8 @@ design: docs/designs/signal-model-evolution/DESIGN.md
 **Dependencies:** None (can run in parallel with M2 and M4)
 **Branch:** `impl/sme-M1-triple-barrier`
 
+**JTBD:** *When I train signal models, I want to use trade-outcome labels (take-profit/stop-loss/expiry) instead of noisy forward returns, so that the model learns to predict tradeable outcomes with balanced class distributions.*
+
 ---
 
 ## Task 1.1: TripleBarrierLabeler Core
@@ -180,17 +182,20 @@ The existing `DecisionFunction._CLASS_NAMES["classification"]` is `["BUY", "HOLD
 **Estimated time:** 2 hours
 
 **Description:**
-Validate that the TripleBarrierLabeler produces high-quality labels using real EURUSD data. This is NOT an integration test — it validates the labeler's output characteristics match the design's expectations.
+Validate that the TripleBarrierLabeler produces high-quality labels using real EURUSD data. This exercises the real training pipeline — not unit tests with synthetic data.
 
 **Validation Steps:**
 1. Load the `ke2e` skill before designing validation
-2. Use `ke2e-test-scout` to search for existing tests covering triple barrier labeling
-3. If no match, use `ke2e-test-designer` to design a test that:
-   - Trains a signal model using `source: triple_barrier` on EURUSD 1h data (2020-2023)
-   - Measures label class distribution (expect 20-40% each class, not 68%+ any class)
-   - Compares with `source: forward_return` baseline on same data
-   - Verifies barriers scale with volatility (wider in 2020 COVID vol vs 2023 low vol)
-4. Execute via `ke2e-test-runner`
+2. Use `ke2e-test-scout` to search for existing tests covering triple barrier labeling or label quality
+3. If no match found, hand off to `ke2e-test-designer` to design a new test that:
+   a. Starts the sandbox (`uv run kinfra sandbox up`)
+   b. Trains a signal model using `source: triple_barrier` via CLI: `uv run ktrdr models train <strategy>.yaml EURUSD 1h --start-date 2020-01-01 --end-date 2023-12-31`
+   c. Inspects training output for label class distribution (expect 20-40% each class, not 68%+ any class)
+   d. Compares with `source: forward_return` baseline on same data (train a second model)
+   e. Verifies barriers scale with volatility (inspect label statistics output)
+4. Execute the test via `ke2e-test-runner` against the real sandbox
+
+**What "real E2E" means here:** The training command runs inside the sandbox, uses real EURUSD data from the data cache, and produces a real model file. The test verifies the model was created and its training logs show expected label distributions.
 
 **Success Criteria (from Design Section 11):**
 - [ ] Class distribution within 20/60/20 to 40/20/40 range (no single class >60%)
