@@ -5,9 +5,11 @@ from pathlib import Path
 
 import pytest
 import yaml
+from pydantic import ValidationError
 
 from ktrdr.config.ensemble_config import (
     CompositionConfig,
+    ContextModifiers,
     EnsembleConfiguration,
     ModelReference,
     RouteRule,
@@ -49,6 +51,98 @@ VALID_ENSEMBLE_YAML = textwrap.dedent(
       on_regime_transition: close_and_switch
 """
 )
+
+
+VALID_ENSEMBLE_WITH_CONTEXT_YAML = textwrap.dedent(
+    """\
+    name: regime_context_v1
+    description: Regime + context gated ensemble
+
+    models:
+      regime:
+        model_path: models/regime_classifier_v1
+        output_type: regime_classification
+      context:
+        model_path: models/context_classifier_v1
+        output_type: context_classification
+      trend_long:
+        model_path: models/trend_follower_long_v1
+        output_type: classification
+      trend_short:
+        model_path: models/trend_follower_short_v1
+        output_type: classification
+      mean_reversion:
+        model_path: models/range_trader_v1
+        output_type: classification
+
+    composition:
+      type: regime_route
+      gate_model: regime
+      context_gate: context
+      regime_threshold: 0.4
+      stability_bars: 3
+      context_modifiers:
+        aligned_discount: 0.15
+        counter_premium: 0.25
+        neutral_effect: 0.03
+      rules:
+        trending_up:
+          model: trend_long
+        trending_down:
+          model: trend_short
+        ranging:
+          model: mean_reversion
+        volatile:
+          action: FLAT
+      on_regime_transition: close_and_switch
+"""
+)
+
+
+class TestContextModifiers:
+    """Tests for ContextModifiers model."""
+
+    def test_default_values(self) -> None:
+        mods = ContextModifiers()
+        assert mods.aligned_discount == 0.2
+        assert mods.counter_premium == 0.3
+        assert mods.neutral_effect == 0.05
+
+    def test_custom_values(self) -> None:
+        mods = ContextModifiers(
+            aligned_discount=0.15,
+            counter_premium=0.25,
+            neutral_effect=0.03,
+        )
+        assert mods.aligned_discount == 0.15
+        assert mods.counter_premium == 0.25
+        assert mods.neutral_effect == 0.03
+
+    def test_rejects_negative_values(self) -> None:
+        with pytest.raises(ValidationError):
+            ContextModifiers(aligned_discount=-0.1)
+        with pytest.raises(ValidationError):
+            ContextModifiers(counter_premium=-0.5)
+        with pytest.raises(ValidationError):
+            ContextModifiers(neutral_effect=-0.01)
+
+    def test_rejects_values_above_one(self) -> None:
+        with pytest.raises(ValidationError):
+            ContextModifiers(aligned_discount=1.5)
+        with pytest.raises(ValidationError):
+            ContextModifiers(counter_premium=2.0)
+        with pytest.raises(ValidationError):
+            ContextModifiers(neutral_effect=1.1)
+
+    def test_boundary_values_accepted(self) -> None:
+        mods = ContextModifiers(
+            aligned_discount=0.0,
+            counter_premium=1.0,
+            neutral_effect=0.0,
+        )
+        assert mods.aligned_discount == 0.0
+        assert mods.counter_premium == 1.0
+        assert mods.neutral_effect == 0.0
 
 
 class TestModelReference:
@@ -121,6 +215,49 @@ class TestCompositionConfig:
         assert config.regime_threshold == 0.4
         assert config.stability_bars == 3
 
+    def test_context_gate_optional(self) -> None:
+        """Ensemble without context_gate works unchanged (backward compat)."""
+        config = CompositionConfig(
+            type="regime_route",
+            gate_model="regime",
+            rules={"trending_up": RouteRule(model="m1")},
+            on_regime_transition="close_and_switch",
+        )
+        assert config.context_gate is None
+        assert config.context_modifiers is None
+
+    def test_context_gate_with_modifiers(self) -> None:
+        config = CompositionConfig(
+            type="regime_route",
+            gate_model="regime",
+            context_gate="context",
+            context_modifiers=ContextModifiers(
+                aligned_discount=0.15,
+                counter_premium=0.25,
+                neutral_effect=0.03,
+            ),
+            rules={"trending_up": RouteRule(model="m1")},
+            on_regime_transition="close_and_switch",
+        )
+        assert config.context_gate == "context"
+        assert config.context_modifiers is not None
+        assert config.context_modifiers.aligned_discount == 0.15
+
+    def test_context_gate_default_modifiers(self) -> None:
+        """If context_gate set but modifiers omitted, defaults are used."""
+        config = CompositionConfig(
+            type="regime_route",
+            gate_model="regime",
+            context_gate="context",
+            rules={"trending_up": RouteRule(model="m1")},
+            on_regime_transition="close_and_switch",
+        )
+        assert config.context_gate == "context"
+        assert config.context_modifiers is not None
+        assert config.context_modifiers.aligned_discount == 0.2
+        assert config.context_modifiers.counter_premium == 0.3
+        assert config.context_modifiers.neutral_effect == 0.05
+
     def test_invalid_transition_policy(self) -> None:
         with pytest.raises(ValueError):
             CompositionConfig(
@@ -183,3 +320,44 @@ class TestEnsembleConfiguration:
         del data["description"]
         config = EnsembleConfiguration.from_dict(data)
         assert config.description is None
+
+    # --- Context gate validation tests ---
+
+    def test_ensemble_without_context_gate_backward_compat(self) -> None:
+        """Regime-only ensemble works unchanged."""
+        data = yaml.safe_load(VALID_ENSEMBLE_YAML)
+        config = EnsembleConfiguration.from_dict(data)
+        assert config.composition.context_gate is None
+        assert config.composition.context_modifiers is None
+
+    def test_valid_ensemble_with_context_gate(self) -> None:
+        data = yaml.safe_load(VALID_ENSEMBLE_WITH_CONTEXT_YAML)
+        config = EnsembleConfiguration.from_dict(data)
+        assert config.composition.context_gate == "context"
+        assert config.composition.context_modifiers is not None
+        assert config.composition.context_modifiers.aligned_discount == 0.15
+
+    def test_context_gate_nonexistent_model_raises(self) -> None:
+        data = yaml.safe_load(VALID_ENSEMBLE_WITH_CONTEXT_YAML)
+        data["composition"]["context_gate"] = "nonexistent_context"
+        with pytest.raises(ValueError, match="nonexistent_context"):
+            EnsembleConfiguration.from_dict(data)
+
+    def test_context_gate_wrong_output_type_raises(self) -> None:
+        data = yaml.safe_load(VALID_ENSEMBLE_WITH_CONTEXT_YAML)
+        # Change context model to wrong output type
+        data["models"]["context"]["output_type"] = "classification"
+        with pytest.raises(ValueError, match="context_classification"):
+            EnsembleConfiguration.from_dict(data)
+
+    def test_context_gate_serialization_roundtrip(self) -> None:
+        data = yaml.safe_load(VALID_ENSEMBLE_WITH_CONTEXT_YAML)
+        config = EnsembleConfiguration.from_dict(data)
+        roundtrip = config.model_dump()
+        config2 = EnsembleConfiguration.from_dict(roundtrip)
+        assert config2.composition.context_gate == "context"
+        assert config2.composition.context_modifiers is not None
+        assert (
+            config2.composition.context_modifiers.aligned_discount
+            == config.composition.context_modifiers.aligned_discount
+        )

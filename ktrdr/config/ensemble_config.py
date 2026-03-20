@@ -45,6 +45,32 @@ class RouteRule(BaseModel):
 VALID_TRANSITION_POLICIES = {"close_and_switch", "let_run"}
 
 
+class ContextModifiers(BaseModel):
+    """Threshold adjustment parameters for context-gated ensembles.
+
+    Controls how daily trend context modifies signal thresholds:
+    - aligned_discount: reduce threshold for trades aligned with context
+    - counter_premium: increase threshold for counter-context trades
+    - neutral_effect: minimal adjustment in neutral context
+    """
+
+    aligned_discount: float = Field(
+        0.2,
+        ge=0.0,
+        le=1.0,
+        description="Fraction to reduce threshold for aligned trades",
+    )
+    counter_premium: float = Field(
+        0.3,
+        ge=0.0,
+        le=1.0,
+        description="Fraction to increase threshold for counter-trend trades",
+    )
+    neutral_effect: float = Field(
+        0.05, ge=0.0, le=1.0, description="Minimal effect in neutral context"
+    )
+
+
 class CompositionConfig(BaseModel):
     """How models compose their outputs."""
 
@@ -52,9 +78,19 @@ class CompositionConfig(BaseModel):
     gate_model: str = Field(
         ..., description="Model that produces regime classification"
     )
+    context_gate: Optional[str] = Field(
+        None, description="Model that produces context classification (optional)"
+    )
     regime_threshold: float = Field(0.4, description="Min probability to assign regime")
     stability_bars: int = Field(
         3, description="Consecutive bars required before regime transition"
+    )
+    context_modifiers: Optional[ContextModifiers] = Field(
+        None, description="Threshold adjustments when context gate is active"
+    )
+    allow_short_from_flat: bool = Field(
+        False,
+        description="Allow SELL signals from FLAT position (forex-style trading)",
     )
     rules: dict[str, RouteRule] = Field(
         ..., description="regime_name → route rule mapping"
@@ -70,6 +106,13 @@ class CompositionConfig(BaseModel):
                 f"Invalid on_regime_transition: '{self.on_regime_transition}'. "
                 f"Must be one of: {sorted(VALID_TRANSITION_POLICIES)}"
             )
+        return self
+
+    @model_validator(mode="after")
+    def validate_context_gate(self) -> "CompositionConfig":
+        """If context_gate is set, ensure context_modifiers exist (use defaults)."""
+        if self.context_gate is not None and self.context_modifiers is None:
+            self.context_modifiers = ContextModifiers()
         return self
 
 
@@ -102,6 +145,20 @@ class EnsembleConfiguration(BaseModel):
                 f"gate_model '{self.composition.gate_model}' has output_type "
                 f"'{gate.output_type}', expected 'regime_classification'"
             )
+
+        # Context gate validation (optional)
+        if self.composition.context_gate is not None:
+            if self.composition.context_gate not in model_names:
+                raise ValueError(
+                    f"context_gate '{self.composition.context_gate}' not found in "
+                    f"models. Available: {sorted(model_names)}"
+                )
+            ctx = self.models[self.composition.context_gate]
+            if ctx.output_type != "context_classification":
+                raise ValueError(
+                    f"context_gate '{self.composition.context_gate}' has output_type "
+                    f"'{ctx.output_type}', expected 'context_classification'"
+                )
 
         # All model references in rules must exist
         for regime_name, rule in self.composition.rules.items():

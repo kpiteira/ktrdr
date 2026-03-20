@@ -6,8 +6,14 @@ from ktrdr.backtesting.position_manager import PositionStatus
 from ktrdr.backtesting.regime_router import (
     RegimeRouter,
     RouteDecision,
+    ThresholdModifier,
 )
-from ktrdr.config.ensemble_config import CompositionConfig, RouteRule
+from ktrdr.config.ensemble_config import (
+    CompositionConfig,
+    ContextModifiers,
+    RouteRule,
+)
+from ktrdr.decision.base import Signal
 
 
 @pytest.fixture
@@ -327,3 +333,157 @@ class TestRouteDecision:
         )
         assert result.transition is None
         assert result.active_regime == "trending_up"
+
+    def test_no_threshold_modifier_without_context(self, router: RegimeRouter) -> None:
+        """Without context_probs, threshold_modifier is None (backward compat)."""
+        result = router.route(
+            regime_probs={
+                "trending_up": 0.80,
+                "trending_down": 0.05,
+                "ranging": 0.10,
+                "volatile": 0.05,
+            },
+            previous_regime=None,
+            current_position=PositionStatus.FLAT,
+        )
+        assert result.threshold_modifier is None
+
+
+class TestThresholdModifier:
+    """Tests for ThresholdModifier dataclass."""
+
+    def test_apply_buy_uses_long_factor(self) -> None:
+        mod = ThresholdModifier(long_factor=0.8, short_factor=1.2)
+        result = mod.apply(base_threshold=0.6, signal=Signal.BUY)
+        assert result == pytest.approx(0.48)
+
+    def test_apply_sell_uses_short_factor(self) -> None:
+        mod = ThresholdModifier(long_factor=0.8, short_factor=1.2)
+        result = mod.apply(base_threshold=0.6, signal=Signal.SELL)
+        assert result == pytest.approx(0.72)
+
+    def test_apply_hold_returns_base(self) -> None:
+        mod = ThresholdModifier(long_factor=0.8, short_factor=1.2)
+        result = mod.apply(base_threshold=0.6, signal=Signal.HOLD)
+        assert result == pytest.approx(0.6)
+
+
+class TestContextThresholdModification:
+    """Tests for context-based threshold modification in routing."""
+
+    @pytest.fixture
+    def context_composition(self) -> CompositionConfig:
+        """Composition with context gate enabled."""
+        return CompositionConfig(
+            type="regime_route",
+            gate_model="regime",
+            context_gate="context",
+            context_modifiers=ContextModifiers(
+                aligned_discount=0.2,
+                counter_premium=0.3,
+                neutral_effect=0.05,
+            ),
+            regime_threshold=0.4,
+            stability_bars=3,
+            rules={
+                "trending_up": RouteRule(model="trend_long"),
+                "trending_down": RouteRule(model="trend_short"),
+                "ranging": RouteRule(model="mean_reversion"),
+                "volatile": RouteRule(action="FLAT"),
+            },
+            on_regime_transition="close_and_switch",
+        )
+
+    @pytest.fixture
+    def context_router(self, context_composition: CompositionConfig) -> RegimeRouter:
+        return RegimeRouter(context_composition)
+
+    def test_bullish_context_lowers_long_threshold(
+        self, context_router: RegimeRouter
+    ) -> None:
+        """Bullish context: long_factor < 1.0 (lower threshold for longs)."""
+        result = context_router.route(
+            regime_probs={
+                "trending_up": 0.80,
+                "trending_down": 0.05,
+                "ranging": 0.10,
+                "volatile": 0.05,
+            },
+            previous_regime=None,
+            current_position=PositionStatus.FLAT,
+            context_probs={"bullish": 0.7, "bearish": 0.1, "neutral": 0.2},
+        )
+        assert result.threshold_modifier is not None
+        assert result.threshold_modifier.long_factor < 1.0
+        assert result.threshold_modifier.short_factor > 1.0
+
+    def test_bearish_context_lowers_short_threshold(
+        self, context_router: RegimeRouter
+    ) -> None:
+        """Bearish context: short_factor < 1.0 (lower threshold for shorts)."""
+        result = context_router.route(
+            regime_probs={
+                "trending_up": 0.05,
+                "trending_down": 0.80,
+                "ranging": 0.10,
+                "volatile": 0.05,
+            },
+            previous_regime=None,
+            current_position=PositionStatus.FLAT,
+            context_probs={"bullish": 0.1, "bearish": 0.7, "neutral": 0.2},
+        )
+        assert result.threshold_modifier is not None
+        assert result.threshold_modifier.long_factor > 1.0
+        assert result.threshold_modifier.short_factor < 1.0
+
+    def test_neutral_context_factors_near_one(
+        self, context_router: RegimeRouter
+    ) -> None:
+        """Neutral context (0.5/0.5): factors near 1.0."""
+        result = context_router.route(
+            regime_probs={
+                "trending_up": 0.80,
+                "trending_down": 0.05,
+                "ranging": 0.10,
+                "volatile": 0.05,
+            },
+            previous_regime=None,
+            current_position=PositionStatus.FLAT,
+            context_probs={"bullish": 0.35, "bearish": 0.35, "neutral": 0.30},
+        )
+        assert result.threshold_modifier is not None
+        assert result.threshold_modifier.long_factor == pytest.approx(1.0, abs=0.05)
+        assert result.threshold_modifier.short_factor == pytest.approx(1.0, abs=0.05)
+
+    def test_strong_bullish_large_discount(self, context_router: RegimeRouter) -> None:
+        """Strong bullish (0.9/0.1): large discount/premium."""
+        result = context_router.route(
+            regime_probs={
+                "trending_up": 0.80,
+                "trending_down": 0.05,
+                "ranging": 0.10,
+                "volatile": 0.05,
+            },
+            previous_regime=None,
+            current_position=PositionStatus.FLAT,
+            context_probs={"bullish": 0.9, "bearish": 0.1, "neutral": 0.0},
+        )
+        assert result.threshold_modifier is not None
+        # net_bias = 0.8, long_factor = 1 - (0.8 * 0.2) = 0.84
+        assert result.threshold_modifier.long_factor == pytest.approx(0.84)
+        # short_factor = 1 + (0.8 * 0.3) = 1.24
+        assert result.threshold_modifier.short_factor == pytest.approx(1.24)
+
+    def test_no_context_probs_no_modifier(self, context_router: RegimeRouter) -> None:
+        """Even with context gate configured, no context_probs → no modifier."""
+        result = context_router.route(
+            regime_probs={
+                "trending_up": 0.80,
+                "trending_down": 0.05,
+                "ranging": 0.10,
+                "volatile": 0.05,
+            },
+            previous_regime=None,
+            current_position=PositionStatus.FLAT,
+        )
+        assert result.threshold_modifier is None

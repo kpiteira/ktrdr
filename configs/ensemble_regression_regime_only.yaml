@@ -1,0 +1,43 @@
+# =============================================================================
+# REGRESSION REGIME-ONLY ENSEMBLE (CONTROL)
+# =============================================================================
+# Same as regression_context_gated but WITHOUT context gate.
+# Used as baseline for differential comparison.
+# =============================================================================
+
+name: regression_regime_only
+description: >-
+  Regime-only ensemble with regression signal models. No context gate.
+  Baseline for comparison against context-gated variant.
+
+models:
+  regime:
+    model_path: models/regime_classifier_seed/1h_latest
+    output_type: regime_classification
+
+  trend_signal:
+    model_path: models/trend_regression_signal/1h_latest
+    output_type: regression
+
+  range_signal:
+    model_path: models/range_regression_signal/1h_latest
+    output_type: regression
+
+composition:
+  type: regime_route
+  gate_model: regime
+  regime_threshold: 0.4
+  stability_bars: 3
+
+  allow_short_from_flat: true
+
+  rules:
+    trending_up:
+      model: trend_signal
+    trending_down:
+      model: trend_signal
+    ranging:
+      model: range_signal
+    volatile:
+      action: FLAT
+  on_regime_transition: close_and_switch

@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 import time
 from dataclasses import dataclass
+from datetime import date
 from typing import Any
 
 import pandas as pd
@@ -74,6 +75,9 @@ class EnsembleBacktestRunner:
     ) -> None:
         self.ensemble_config = ensemble_config
         self.backtest_config = backtest_config
+        # Context gate tracking — evaluated once per daily bar close
+        self._current_context_probs: dict[str, float] | None = None
+        self._last_context_date: date | None = None
 
     def _load_models(self) -> dict[str, ModelBundle]:
         """Load all model bundles referenced in ensemble config."""
@@ -114,6 +118,11 @@ class EnsembleBacktestRunner:
 
             output_type = bundle.metadata.output_type
 
+            # Inject ensemble-level allow_short_from_flat for signal models
+            if self.ensemble_config.composition.allow_short_from_flat:
+                if output_type == "classification":
+                    decisions_config["allow_short_from_flat"] = True
+
             fns[name] = DecisionFunction(
                 model=bundle.model,
                 feature_names=bundle.feature_names,
@@ -132,6 +141,59 @@ class EnsembleBacktestRunner:
         nn_probs: dict[str, float] = decision.reasoning.get("nn_probabilities", {})
         return {name: float(nn_probs.get(name.upper(), 0.0)) for name in REGIME_NAMES}
 
+    def _interpret_context_output(self, decision: Any) -> dict[str, float]:
+        """Convert context DecisionFunction output to context probabilities.
+
+        The DecisionFunction for context models returns probabilities with
+        uppercase keys (BULLISH, BEARISH, NEUTRAL) in reasoning["nn_probabilities"].
+        The RegimeRouter expects lowercase keys.
+        """
+        nn_probs: dict[str, float] = decision.reasoning.get("nn_probabilities", {})
+        return {
+            "bullish": float(nn_probs.get("BULLISH", 0.0)),
+            "bearish": float(nn_probs.get("BEARISH", 0.0)),
+            "neutral": float(nn_probs.get("NEUTRAL", 0.0)),
+        }
+
+    def _maybe_update_context(
+        self,
+        timestamp: pd.Timestamp,
+        feature_caches: dict[str, Any],
+        decision_functions: dict[str, Any],
+        position: PositionStatus,
+        bar: pd.Series,
+    ) -> None:
+        """Re-evaluate context model when daily bar closes.
+
+        Context is evaluated once per daily bar change, not every hourly bar.
+        The result is held constant for all bars within the same day.
+        """
+        context_gate = self.ensemble_config.composition.context_gate
+        if context_gate is None:
+            return
+
+        bar_date = timestamp.date()
+        if self._last_context_date is not None and bar_date <= self._last_context_date:
+            return  # Same day — use cached context
+
+        # New day — re-evaluate context model
+        context_features = feature_caches[context_gate].get_features_for_timestamp(
+            timestamp
+        )
+        if context_features is not None:
+            context_decision = decision_functions[context_gate](
+                features=context_features,
+                position=position,
+                bar=bar,
+            )
+            self._current_context_probs = self._interpret_context_output(
+                context_decision
+            )
+            logger.debug(
+                f"Context updated for {bar_date}: {self._current_context_probs}"
+            )
+        self._last_context_date = bar_date
+
     def _run_bar(
         self,
         timestamp: pd.Timestamp,
@@ -147,6 +209,15 @@ class EnsembleBacktestRunner:
             Dict with keys: regime, signal, transition, active_model
         """
         gate_model_name = self.ensemble_config.composition.gate_model
+
+        # 0. Update context if daily bar closed (once per day)
+        self._maybe_update_context(
+            timestamp=timestamp,
+            feature_caches=feature_caches,
+            decision_functions=decision_functions,
+            position=position_manager.current_position_status,
+            bar=bar,
+        )
 
         # 1. Get regime features and classify
         regime_features = feature_caches[gate_model_name].get_features_for_timestamp(
@@ -167,11 +238,12 @@ class EnsembleBacktestRunner:
         )
         regime_probs = self._interpret_regime_output(regime_decision)
 
-        # 2. Route to signal model
+        # 2. Route to signal model (with optional context)
         route = router.route(
             regime_probs=regime_probs,
             previous_regime=router._confirmed_regime,
             current_position=position_manager.current_position_status,
+            context_probs=self._current_context_probs,
         )
 
         # 3. Handle transition — close position if required
@@ -212,6 +284,41 @@ class EnsembleBacktestRunner:
                 )
                 final_signal = signal_decision.signal
 
+                # 5. Apply context-adjusted threshold if modifier present
+                if route.threshold_modifier:
+                    signal_fn = decision_functions[route.active_model]
+                    output_fmt = getattr(signal_fn, "output_format", "classification")
+
+                    if output_fmt == "regression":
+                        # Regression: adjust trade_threshold, re-evaluate predicted_return
+                        base_trade_threshold = getattr(
+                            signal_fn, "trade_threshold", 0.0004
+                        )
+                        predicted_return = signal_decision.reasoning.get(
+                            "predicted_return", 0.0
+                        )
+                        buy_threshold = route.threshold_modifier.apply(
+                            base_trade_threshold, Signal.BUY
+                        )
+                        sell_threshold = route.threshold_modifier.apply(
+                            base_trade_threshold, Signal.SELL
+                        )
+                        # Re-evaluate signal with adjusted thresholds
+                        if predicted_return > buy_threshold:
+                            final_signal = Signal.BUY
+                        elif predicted_return < -sell_threshold:
+                            final_signal = Signal.SELL
+                        else:
+                            final_signal = Signal.HOLD
+                    elif final_signal != Signal.HOLD:
+                        # Classification: adjust confidence_threshold
+                        base_threshold = getattr(signal_fn, "confidence_threshold", 0.5)
+                        adjusted_threshold = route.threshold_modifier.apply(
+                            base_threshold, final_signal
+                        )
+                        if signal_decision.confidence < adjusted_threshold:
+                            final_signal = Signal.HOLD
+
         return {
             "regime": route.active_regime,
             "signal": final_signal,
@@ -240,25 +347,32 @@ class EnsembleBacktestRunner:
         feature_caches = self._create_feature_caches(bundles)
         decision_functions = self._create_decision_functions(bundles)
 
-        # 3. Load OHLCV data
+        # 3. Load OHLCV data for all required timeframes
         from ktrdr.data.repository import DataRepository
 
         repo = DataRepository()
         base_tf = self.backtest_config.timeframe
 
-        # Load base timeframe data from cache
-        data = repo.load_from_cache(
-            symbol=self.backtest_config.symbol,
-            timeframe=base_tf,
-            start_date=self.backtest_config.start_date,
-            end_date=self.backtest_config.end_date,
-        )
+        # Collect all timeframes needed across ensemble models
+        required_tfs: set[str] = {base_tf}
+        for _name, bundle in bundles.items():
+            for tf in bundle.metadata.training_timeframes:
+                required_tfs.add(tf)
 
-        # Build multi-TF dict (currently single-TF — ensemble models
-        # share the same base timeframe)
-        multi_tf_data = {base_tf: data}
+        # Load each required timeframe
+        multi_tf_data: dict[str, pd.DataFrame] = {}
+        for tf in required_tfs:
+            multi_tf_data[tf] = repo.load_from_cache(
+                symbol=self.backtest_config.symbol,
+                timeframe=tf,
+                start_date=self.backtest_config.start_date,
+                end_date=self.backtest_config.end_date,
+            )
+        data = multi_tf_data[base_tf]
 
         # 4. Compute features for all models
+        # Each model's cache gets the full multi-TF dict; it selects
+        # the timeframe(s) it needs based on its strategy config.
         for _name, cache in feature_caches.items():
             cache.compute_all_features(multi_tf_data)
 

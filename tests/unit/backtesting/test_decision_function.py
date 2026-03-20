@@ -364,6 +364,93 @@ class TestPositionAwarenessFilter:
 
 
 # ---------------------------------------------------------------------------
+# Tests: allow_short_from_flat (forex-style trading)
+# ---------------------------------------------------------------------------
+
+
+class TestAllowShortFromFlat:
+    """Test allow_short_from_flat option for forex pairs."""
+
+    def test_default_blocks_sell_from_flat(self):
+        """Default behavior: SELL from FLAT is blocked (equity-style)."""
+        df = _make_decision_function(signal_idx=2, confidence=0.8)
+        features = dict.fromkeys(FEATURE_NAMES, 0.5)
+
+        decision = df(features, PositionStatus.FLAT, _make_bar())
+
+        assert decision.signal == Signal.HOLD
+
+    def test_allow_short_passes_sell_from_flat(self):
+        """With allow_short_from_flat=True, SELL from FLAT passes through."""
+        config = _make_decisions_config()
+        config["allow_short_from_flat"] = True
+        df = _make_decision_function(
+            signal_idx=2, confidence=0.8, decisions_config=config
+        )
+        features = dict.fromkeys(FEATURE_NAMES, 0.5)
+
+        decision = df(features, PositionStatus.FLAT, _make_bar())
+
+        assert decision.signal == Signal.SELL
+
+    def test_allow_short_still_blocks_sell_when_already_short(self):
+        """allow_short_from_flat doesn't override redundant signal blocking."""
+        config = _make_decisions_config()
+        config["allow_short_from_flat"] = True
+        df = _make_decision_function(
+            signal_idx=2, confidence=0.8, decisions_config=config
+        )
+        features = dict.fromkeys(FEATURE_NAMES, 0.5)
+
+        decision = df(features, PositionStatus.SHORT, _make_bar())
+
+        assert decision.signal == Signal.HOLD
+
+    def test_allow_short_sell_from_long_unaffected(self):
+        """SELL from LONG (close position) works regardless of setting."""
+        config = _make_decisions_config()
+        config["allow_short_from_flat"] = True
+        df = _make_decision_function(
+            signal_idx=2, confidence=0.8, decisions_config=config
+        )
+        features = dict.fromkeys(FEATURE_NAMES, 0.5)
+
+        decision = df(features, PositionStatus.LONG, _make_bar())
+
+        assert decision.signal == Signal.SELL
+
+    def test_regression_mode_always_allows_shorts(self):
+        """Regression output_format bypasses short-from-flat filter entirely."""
+        config = {
+            "output_format": "regression",
+            "confidence_threshold": 0.5,
+            "filters": {"min_signal_separation": 4},
+            "position_awareness": True,
+            "cost_model": {
+                "round_trip_cost": 0.003,
+                "min_edge_multiplier": 1.5,
+            },
+        }
+        model = MagicMock()
+        df = DecisionFunction(model, FEATURE_NAMES, config)
+
+        # Mock _predict to return SELL signal
+        df._predict = MagicMock(
+            return_value={  # type: ignore[method-assign]
+                "signal": Signal.SELL,
+                "confidence": 0.8,
+                "predicted_return": -0.01,
+                "probabilities": {"BUY": 0.0, "HOLD": 0.0, "SELL": 1.0},
+            }
+        )
+        features = dict.fromkeys(FEATURE_NAMES, 0.5)
+
+        decision = df(features, PositionStatus.FLAT, _make_bar())
+
+        assert decision.signal == Signal.SELL
+
+
+# ---------------------------------------------------------------------------
 # Tests: Model inference error handling
 # ---------------------------------------------------------------------------
 

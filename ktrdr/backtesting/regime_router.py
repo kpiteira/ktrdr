@@ -4,10 +4,11 @@ Routes to per-regime signal models based on regime classification output.
 Implements stability filter to prevent costly regime flicker (Scenario 7).
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from ktrdr.backtesting.position_manager import PositionStatus
 from ktrdr.config.ensemble_config import CompositionConfig
+from ktrdr.decision.base import Signal
 
 REGIME_NAMES = ["trending_up", "trending_down", "ranging", "volatile"]
 
@@ -22,6 +23,27 @@ class TransitionAction:
 
 
 @dataclass
+class ThresholdModifier:
+    """Direction-specific threshold adjustments from context analysis.
+
+    Multiplies the base confidence threshold for signal decisions:
+    - long_factor < 1.0 means lower threshold (easier to go long)
+    - short_factor > 1.0 means higher threshold (harder to go short)
+    """
+
+    long_factor: float
+    short_factor: float
+
+    def apply(self, base_threshold: float, signal: Signal) -> float:
+        """Apply direction-specific modifier to base threshold."""
+        if signal == Signal.BUY:
+            return base_threshold * self.long_factor
+        elif signal == Signal.SELL:
+            return base_threshold * self.short_factor
+        return base_threshold
+
+
+@dataclass
 class RouteDecision:
     """Result of regime routing."""
 
@@ -30,6 +52,7 @@ class RouteDecision:
     active_model: str | None
     transition: TransitionAction | None
     reasoning: str
+    threshold_modifier: ThresholdModifier | None = field(default=None)
 
 
 class RegimeRouter:
@@ -50,6 +73,7 @@ class RegimeRouter:
         regime_probs: dict[str, float],
         previous_regime: str | None,
         current_position: PositionStatus,
+        context_probs: dict[str, float] | None = None,
     ) -> RouteDecision:
         """Determine which signal model to run for this bar.
 
@@ -57,6 +81,7 @@ class RegimeRouter:
         2. Apply stability filter: require N consecutive bars before transitioning
         3. If stable transition: apply transition policy (close_and_switch / let_run)
         4. Look up route rule for active regime
+        5. If context_probs provided, compute threshold modifier
         """
         # Determine proposed regime from probabilities
         proposed_regime = self._get_dominant_regime(regime_probs)
@@ -72,6 +97,7 @@ class RegimeRouter:
                 proposed_confidence,
                 transition=None,
                 reasoning=f"Initial regime: {proposed_regime} (confidence: {proposed_confidence:.2f})",
+                context_probs=context_probs,
             )
 
         # Apply stability filter
@@ -121,7 +147,11 @@ class RegimeRouter:
             )
 
         return self._build_decision(
-            active_regime, proposed_confidence, transition, reasoning
+            active_regime,
+            proposed_confidence,
+            transition,
+            reasoning,
+            context_probs=context_probs,
         )
 
     def _get_dominant_regime(self, regime_probs: dict[str, float]) -> str:
@@ -146,10 +176,16 @@ class RegimeRouter:
         confidence: float,
         transition: TransitionAction | None,
         reasoning: str,
+        context_probs: dict[str, float] | None = None,
     ) -> RouteDecision:
         """Build a RouteDecision from the active regime."""
         rule = self._composition.rules.get(active_regime)
         active_model = rule.model if rule else None
+
+        # Compute context-based threshold modifier if available
+        threshold_modifier = None
+        if context_probs and self._composition.context_modifiers:
+            threshold_modifier = self._compute_threshold_modifier(context_probs)
 
         return RouteDecision(
             active_regime=active_regime,
@@ -157,4 +193,31 @@ class RegimeRouter:
             active_model=active_model,
             transition=transition,
             reasoning=reasoning,
+            threshold_modifier=threshold_modifier,
         )
+
+    def _compute_threshold_modifier(
+        self, context_probs: dict[str, float]
+    ) -> ThresholdModifier:
+        """Compute direction-specific threshold adjustments from context.
+
+        Net bias (bullish - bearish) drives asymmetric adjustments:
+        - Positive bias (bullish): lowers long thresholds, raises short thresholds
+        - Negative bias (bearish): lowers short thresholds, raises long thresholds
+        """
+        bullish_conf = context_probs.get("bullish", 0.0)
+        bearish_conf = context_probs.get("bearish", 0.0)
+        # Caller guarantees context_modifiers is not None
+        assert self._composition.context_modifiers is not None
+        mods = self._composition.context_modifiers
+
+        net_bias = bullish_conf - bearish_conf  # Range: [-1, +1]
+
+        if net_bias > 0:  # Bullish context
+            long_factor = 1.0 - (net_bias * mods.aligned_discount)
+            short_factor = 1.0 + (net_bias * mods.counter_premium)
+        else:  # Bearish context
+            long_factor = 1.0 + (abs(net_bias) * mods.counter_premium)
+            short_factor = 1.0 - (abs(net_bias) * mods.aligned_discount)
+
+        return ThresholdModifier(long_factor=long_factor, short_factor=short_factor)
