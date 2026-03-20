@@ -12,15 +12,15 @@ description: >-
 
 models:
   regime:
-    model_path: /Users/karl/.ktrdr/shared/models/regime_classifier_seed/1h_latest
+    model_path: models/regime_classifier_seed/1h_latest
     output_type: regime_classification
 
   trend_signal:
-    model_path: /Users/karl/.ktrdr/shared/models/trend_regression_signal/1h_latest
+    model_path: models/trend_regression_signal/1h_latest
     output_type: regression
 
   range_signal:
-    model_path: /Users/karl/.ktrdr/shared/models/range_regression_signal/1h_latest
+    model_path: models/range_regression_signal/1h_latest
     output_type: regression
 
 composition:

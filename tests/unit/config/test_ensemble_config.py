@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 import yaml
+from pydantic import ValidationError
 
 from ktrdr.config.ensemble_config import (
     CompositionConfig,
@@ -116,6 +117,32 @@ class TestContextModifiers:
         assert mods.aligned_discount == 0.15
         assert mods.counter_premium == 0.25
         assert mods.neutral_effect == 0.03
+
+    def test_rejects_negative_values(self) -> None:
+        with pytest.raises(ValidationError):
+            ContextModifiers(aligned_discount=-0.1)
+        with pytest.raises(ValidationError):
+            ContextModifiers(counter_premium=-0.5)
+        with pytest.raises(ValidationError):
+            ContextModifiers(neutral_effect=-0.01)
+
+    def test_rejects_values_above_one(self) -> None:
+        with pytest.raises(ValidationError):
+            ContextModifiers(aligned_discount=1.5)
+        with pytest.raises(ValidationError):
+            ContextModifiers(counter_premium=2.0)
+        with pytest.raises(ValidationError):
+            ContextModifiers(neutral_effect=1.1)
+
+    def test_boundary_values_accepted(self) -> None:
+        mods = ContextModifiers(
+            aligned_discount=0.0,
+            counter_premium=1.0,
+            neutral_effect=0.0,
+        )
+        assert mods.aligned_discount == 0.0
+        assert mods.counter_premium == 1.0
+        assert mods.neutral_effect == 0.0
 
 
 class TestModelReference:

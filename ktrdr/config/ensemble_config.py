@@ -55,12 +55,20 @@ class ContextModifiers(BaseModel):
     """
 
     aligned_discount: float = Field(
-        0.2, description="Fraction to reduce threshold for aligned trades"
+        0.2,
+        ge=0.0,
+        le=1.0,
+        description="Fraction to reduce threshold for aligned trades",
     )
     counter_premium: float = Field(
-        0.3, description="Fraction to increase threshold for counter-trend trades"
+        0.3,
+        ge=0.0,
+        le=1.0,
+        description="Fraction to increase threshold for counter-trend trades",
     )
-    neutral_effect: float = Field(0.05, description="Minimal effect in neutral context")
+    neutral_effect: float = Field(
+        0.05, ge=0.0, le=1.0, description="Minimal effect in neutral context"
+    )
 
 
 class CompositionConfig(BaseModel):
