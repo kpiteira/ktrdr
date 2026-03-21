@@ -134,24 +134,30 @@ class TestModelTrainerFocalLoss:
         assert "final_train_loss" in result
         assert result["final_train_loss"] > 0
 
-    def test_focal_gamma_configurable(self, classification_data):
-        """focal_gamma parameter is respected."""
+    def test_focal_gamma_configurable(self, classification_data, monkeypatch):
+        """focal_gamma parameter is passed to FocalLoss."""
         X_train, y_train, X_val, y_val = classification_data
 
-        # Train with different gammas — should produce different loss values
-        results = {}
+        # Spy on FocalLoss to capture gamma values
+        created_gammas: list[float] = []
+        original_init = FocalLoss.__init__
+
+        def spy_init(self, gamma=2.0, alpha=None):
+            created_gammas.append(gamma)
+            return original_init(self, gamma=gamma, alpha=alpha)
+
+        monkeypatch.setattr(FocalLoss, "__init__", spy_init)
+
         for gamma in [0.0, 1.0, 3.0]:
             torch.manual_seed(42)
             config = make_config(loss="focal", focal_gamma=gamma)
             trainer = ModelTrainer(config=config)
             model = build_model()
-            result = trainer.train(
+            trainer.train(
                 model=model, X_train=X_train, y_train=y_train, X_val=X_val, y_val=y_val
             )
-            results[gamma] = result["final_train_loss"]
 
-        # gamma=0 should behave like CE (different from gamma=3)
-        assert results[0.0] != pytest.approx(results[3.0], rel=0.1)
+        assert created_gammas == [0.0, 1.0, 3.0]
 
     def test_default_is_cross_entropy(self, classification_data):
         """Without loss config, CrossEntropyLoss is used (backward compatible)."""

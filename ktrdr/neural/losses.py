@@ -11,13 +11,14 @@ class FocalLoss(nn.Module):
     """Focal Loss for handling class imbalance.
 
     Down-weights easy (well-classified) examples and focuses training on hard examples.
-    When gamma=0, this reduces to standard cross-entropy loss.
+    When gamma=0 and alpha is None, this reduces to standard (unweighted) cross-entropy loss.
 
     Reference: Lin et al., "Focal Loss for Dense Object Detection", ICCV 2017.
 
     Args:
-        gamma: Focusing parameter. 0 = standard CE, 2 = standard focal loss.
-        alpha: Optional per-class weight tensor.
+        gamma: Focusing parameter. 0 = standard CE when alpha is None, 2 = standard focal loss.
+        alpha: Optional per-class weight tensor. When provided with gamma=0, produces
+            alpha-weighted cross-entropy (not standard unweighted CE).
     """
 
     def __init__(self, gamma: float = 2.0, alpha: Optional[torch.Tensor] = None):

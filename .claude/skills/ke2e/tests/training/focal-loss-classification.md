@@ -397,8 +397,8 @@ echo "This is the known wiring bug described in the CRITICAL section."
 ```
 
 **Expected:**
-- Log evidence that FocalLoss was instantiated (e.g., "Using focal loss with gamma=2.0")
-- If no such evidence appears, the wiring bug is still present
+- Ideally, log evidence that FocalLoss was instantiated (e.g., "Using focal loss with gamma=2.0")
+- If no such evidence appears, this is **inconclusive**: ModelTrainer does not currently log the loss type. In that case, verify focal-loss usage by checking that `loss: "focal"` and `focal_gamma` are present in the effective training config passed to ModelTrainer, or by comparing first-epoch loss magnitude against cross-entropy baseline (focal loss with gamma=2.0 produces lower loss on untrained models).
 
 ### 8. Compare Against Cross-Entropy Baseline (Optional Validation)
 
