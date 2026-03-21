@@ -299,7 +299,14 @@ class ModelTrainer:
             else:
                 criterion = nn.MSELoss()
         else:
-            criterion = nn.CrossEntropyLoss()
+            loss_type = self.config.get("loss", "cross_entropy")
+            if loss_type == "focal":
+                from ktrdr.neural.losses import FocalLoss
+
+                gamma = self.config.get("focal_gamma", 2.0)
+                criterion = FocalLoss(gamma=gamma)
+            else:
+                criterion = nn.CrossEntropyLoss()
 
         # Setup learning rate scheduler
         scheduler = self._create_scheduler(optimizer)

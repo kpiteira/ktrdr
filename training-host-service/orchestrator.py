@@ -908,14 +908,20 @@ class HostTrainingOrchestrator:
                     "learning_rate", 0.001
                 ),
                 "batch_size": training_section_for_config.get("batch_size", 32),
+                "output_format": output_format,
             }
 
-            # Inject regression config into training config
+            # Pass loss config for all output formats (focal loss for classification,
+            # huber/mse for regression)
+            if "loss" in training_section_for_config:
+                training_config["loss"] = training_section_for_config["loss"]
+            if "focal_gamma" in training_section_for_config:
+                training_config["focal_gamma"] = training_section_for_config[
+                    "focal_gamma"
+                ]
+
             if output_format == "regression":
-                training_config["output_format"] = "regression"
-                training_config["loss"] = training_section_for_config.get(
-                    "loss", "huber"
-                )
+                training_config.setdefault("loss", "huber")
                 training_config["huber_delta"] = training_section_for_config.get(
                     "huber_delta", 0.01
                 )

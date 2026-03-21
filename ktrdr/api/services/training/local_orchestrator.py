@@ -372,12 +372,18 @@ class LocalTrainingOrchestrator:
             "epochs": training_section.get("epochs", 100),
             "learning_rate": training_section.get("learning_rate", 0.001),
             "batch_size": training_section.get("batch_size", 32),
+            "output_format": output_format,
         }
 
-        # Inject regression config into training config so ModelTrainer knows the mode
+        # Pass loss config for all output formats (focal loss for classification,
+        # huber/mse for regression)
+        if "loss" in training_section:
+            training_config["loss"] = training_section["loss"]
+        if "focal_gamma" in training_section:
+            training_config["focal_gamma"] = training_section["focal_gamma"]
+
         if output_format == "regression":
-            training_config["output_format"] = "regression"
-            training_config["loss"] = training_section.get("loss", "huber")
+            training_config.setdefault("loss", "huber")
             training_config["huber_delta"] = training_section.get("huber_delta", 0.01)
             # Disable weight decay for regression — L2 regularization kills models
             # with tiny labels (forward returns ~0.003) by pushing weights to zero
