@@ -9,7 +9,7 @@ models:
     output_type: regime_classification
 
   trend_signal:
-    model_path: /app/models/trend_tb_gaussian_signal_v1/1h_latest
+    model_path: /app/models/trend_tb_gaussian_signal_v1/5m_latest
     output_type: classification
 
   range_signal:
