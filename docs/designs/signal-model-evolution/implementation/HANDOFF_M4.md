@@ -76,16 +76,22 @@
 
 ## Task 4.5: Validation — Dead Zone Elimination ✅
 
-**Validation results:**
-- Strategy YAML validates via CLI: 32 resolved features (24 fuzzy + 8 raw)
-- Dead zone analysis (all 4 indicators, 1000 samples each across full range):
-  - RSI: 0/1000 dead zones (was 60.2% with triangular)
-  - ADX: 0/1000 dead zones
-  - MACD: 0/1000 dead zones (sigma widened from 0.0008 to 0.002 to cover tails)
-  - ROC: 0/1000 dead zones (sigma widened from 0.2 to 0.35)
-- Feature resolution: 24 fuzzy + 8 raw with correct `__raw__` sentinels and interleaved ordering
-- Raw indicator features always non-zero for real data → hybrid encoding guarantees non-zero input
+**Validation on real EURUSD 2024 data (5,647 bars after warmup):**
+
+| Metric | OLD (Triangular 2-set) | NEW (Gaussian 3-set + Hybrid) |
+|--------|----------------------|------------------------------|
+| Near-zero feature cells | 8,893/22,588 (39.4%) | 1,315/180,704 (0.7%) |
+| Avg features-at-zero/bar | **1.57/4** | **0.23/32** |
+| Bars with ALL features non-zero | 0/5,647 (0.0%) | 4,707/5,647 (83.4%) |
+| RSI fuzzy zero rate | 77-80% | 1-2% (Gaussian tail at extremes) |
+| Raw features zero rate | N/A | 0.2% (ROC near zero when price flat) |
+
+**Key finding:** The design claimed 5.1/8 → 0/N. Real measurement shows 1.57/4 → 0.23/32:
+- Not exactly zero — Gaussian tails at extreme indicator values (RSI near 0/100, ADX very high) produce near-zero membership on ~1-6% of bars
+- But raw indicators cover those gaps — 83.4% of bars have ALL 32 features non-zero
+- The old strategy had ZERO bars with all features active
 
 **Gotchas:**
-- Initial MACD/ROC sigma values were too narrow for domain tails (316/94 dead zones). Widened sigmas fixed it.
-- Dead zone threshold: membership < 0.01 counts as dead. Gaussian tails drop below this at extreme values if σ is too small.
+- Initial MACD/ROC sigma values were too narrow for domain tails (316/94 dead zones on synthetic data). Widened sigmas fixed it.
+- ADX `weak` set has highest residual zero rate (6.4% on 1h) because ADX > 50 is genuinely extreme — the Gaussian tail is correct behavior there
+- ROC raw has 1% zeros — these are bars where price literally didn't move (ROC = 0.0). Legitimate zeros, not dead zones.
