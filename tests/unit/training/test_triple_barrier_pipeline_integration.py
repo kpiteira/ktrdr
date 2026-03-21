@@ -249,7 +249,8 @@ class TestTripleBarrierPipelineIntegration:
 
     def test_no_weights_by_default(self, sample_price_data):
         """Without compute_weights, no weights should be stored."""
-        TrainingPipeline._sample_weights = None
+        # Set stale weights to verify they get cleared
+        TrainingPipeline._sample_weights = torch.FloatTensor([1.0, 2.0])
 
         label_config = {
             "source": "triple_barrier",
@@ -260,4 +261,26 @@ class TestTripleBarrierPipelineIntegration:
         }
         TrainingPipeline.create_labels(sample_price_data, label_config)
 
+        # Stale weights should be cleared
         assert TrainingPipeline.get_sample_weights() is None
+
+    def test_weights_with_cusum_have_correct_length(self, sample_price_data):
+        """When both compute_weights and cusum_threshold are set, weights match filtered labels."""
+        TrainingPipeline._sample_weights = None
+
+        label_config = {
+            "source": "triple_barrier",
+            "pt_multiplier": 2.0,
+            "sl_multiplier": 1.5,
+            "max_holding_period": 50,
+            "vol_span": 50,
+            "compute_weights": True,
+            "cusum_threshold": 0.001,
+        }
+        labels = TrainingPipeline.create_labels(sample_price_data, label_config)
+        weights = TrainingPipeline.get_sample_weights()
+
+        assert weights is not None
+        assert len(weights) == len(
+            labels
+        ), f"Weights ({len(weights)}) must match filtered labels ({len(labels)})"

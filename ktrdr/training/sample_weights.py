@@ -16,7 +16,8 @@ def compute_uniqueness_weights(
 ) -> pd.Series:
     """Compute sample uniqueness weights based on label concurrency.
 
-    For each labeled bar t with active period [t, t + holding_period],
+    For each labeled bar t with active period [t, t + holding_period),
+    i.e. over its next ``holding_period`` bars starting at t,
     the weight is the average of 1/concurrency across its active period.
 
     Args:

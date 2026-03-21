@@ -506,7 +506,7 @@ curl -s "http://localhost:$API_PORT/api/v1/operations/$TASK_ID" | jq '{
 - [ ] **CUSUM filtering actually reduced count** -- If "After CUSUM filtering" shows the same count as generated labels, the filter passed everything (threshold too low). This means CUSUM is inert
 - [ ] **model.pt > 1KB** -- Under 1KB suggests empty or corrupted model save
 - [ ] **test_accuracy < 0.85** -- On a 3-class problem with CUSUM-filtered forex data, > 85% accuracy is suspicious. Could indicate data leakage or model collapse to majority class
-- [ ] **output_type is "classification"** -- Triple barrier produces 3-class classification labels. The output_type_map in local_orchestrator.py does not have a specific entry for "triple_barrier" so it falls through to the default "classification". If it says something else, the mapping logic changed
+- [ ] **output_type is "classification"** -- Triple barrier produces 3-class classification labels. The output_type_map in local_orchestrator.py has an explicit entry mapping "triple_barrier" to "classification". If it says something else, the mapping logic or map entry changed
 
 **Sanity check command:**
 ```bash

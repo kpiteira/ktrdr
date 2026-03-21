@@ -62,9 +62,9 @@ class TrainingPipeline:
     these methods differently for their execution environments.
     """
 
-    # Class-level storage for sample weights (set by create_labels when
-    # compute_weights=True for triple_barrier source)
+    # Class-level storage for triple barrier metadata (set by create_labels)
     _sample_weights: torch.Tensor | None = None
+    _cusum_event_mask: pd.Series | None = None
 
     @staticmethod
     def get_sample_weights() -> torch.Tensor | None:
@@ -74,6 +74,15 @@ class TrainingPipeline:
         Weights are normalized (mean=1.0) for compatibility with loss functions.
         """
         return TrainingPipeline._sample_weights
+
+    @staticmethod
+    def get_cusum_event_mask() -> pd.Series | None:
+        """Return CUSUM event mask from the last create_labels() call.
+
+        Boolean Series where True = event bar selected by CUSUM filter.
+        Used by orchestrator for feature/label alignment when CUSUM is active.
+        """
+        return TrainingPipeline._cusum_event_mask
 
     # ======================================================================
     # DATA LOADING METHODS
@@ -448,6 +457,10 @@ class TrainingPipeline:
                 - LongTensor for context (BULLISH=0, BEARISH=1, NEUTRAL=2)
                 - LongTensor for regime (4-class)
         """
+        # Clear stale state from prior runs
+        TrainingPipeline._sample_weights = None
+        TrainingPipeline._cusum_event_mask = None
+
         source = label_config.get("source", "zigzag")
 
         # Resolve base timeframe price data
@@ -581,7 +594,7 @@ class TrainingPipeline:
             if cusum_threshold is not None:
                 from ktrdr.training.cusum_filter import CUSUMFilter
 
-                cusum_mult = label_config.get("cusum_multiplier", 1.0)
+                cusum_mult = label_config.get("cusum_multiplier", 0.5)
                 filt = CUSUMFilter(
                     threshold=cusum_threshold if cusum_threshold > 0 else None,
                     cusum_multiplier=cusum_mult,
@@ -597,7 +610,15 @@ class TrainingPipeline:
             labels = tb_labeler.generate_labels(tf_price_data)
             stats = tb_labeler.get_label_statistics(labels)
 
-            # Optionally compute uniqueness weights
+            # Apply CUSUM mask if filtering was done (before weights)
+            if cusum_threshold is not None:
+                event_indices = events[events].index
+                labels = labels[labels.index.isin(event_indices)]
+                # Store event mask for feature alignment in orchestrator
+                TrainingPipeline._cusum_event_mask = events
+                logger.info(f"After CUSUM filtering: {len(labels)} labels retained")
+
+            # Optionally compute uniqueness weights (on final filtered labels)
             compute_weights = label_config.get("compute_weights", False)
             if compute_weights:
                 from ktrdr.training.sample_weights import (
@@ -606,23 +627,20 @@ class TrainingPipeline:
 
                 holding_periods = tb_labeler.get_holding_periods()
                 if holding_periods is not None:
+                    # Filter holding periods to match CUSUM-filtered labels
+                    if cusum_threshold is not None:
+                        holding_periods = holding_periods[
+                            holding_periods.index.isin(labels.index)
+                        ]
                     weights = compute_uniqueness_weights(
                         labels, holding_periods, normalize=True
                     )
-                    # Store on class for downstream access
                     TrainingPipeline._sample_weights = torch.FloatTensor(weights.values)
                     logger.info(
                         f"Computed uniqueness weights: "
                         f"mean={weights.mean():.3f}, "
                         f"min={weights.min():.3f}, max={weights.max():.3f}"
                     )
-
-            # Apply CUSUM mask if filtering was done
-            if cusum_threshold is not None:
-                # Only keep labels at event bars (align indices)
-                event_indices = events[events].index
-                labels = labels[labels.index.isin(event_indices)]
-                logger.info(f"After CUSUM filtering: {len(labels)} labels retained")
 
             # Map TB labels to class indices: +1→0 (BUY), 0→1 (HOLD), -1→2 (SELL)
             class_map = {1: 0, 0: 1, -1: 2}

@@ -19,7 +19,8 @@ class CUSUMFilter:
     exceeds the threshold, an event is emitted and that sum resets.
 
     This is a pure filter — it selects WHICH bars to label, not
-    HOW to label them. Apply before TripleBarrierLabeler.generate_labels().
+    HOW to label them. In the training pipeline, labels are generated
+    on the full series and this filter is then used to select event bars.
     """
 
     def __init__(
