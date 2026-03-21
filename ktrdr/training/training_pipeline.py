@@ -62,6 +62,28 @@ class TrainingPipeline:
     these methods differently for their execution environments.
     """
 
+    # Class-level storage for triple barrier metadata (set by create_labels)
+    _sample_weights: torch.Tensor | None = None
+    _cusum_event_mask: pd.Series | None = None
+
+    @staticmethod
+    def get_sample_weights() -> torch.Tensor | None:
+        """Return sample weights from the last create_labels() call.
+
+        Only populated when source='triple_barrier' and compute_weights=True.
+        Weights are normalized (mean=1.0) for compatibility with loss functions.
+        """
+        return TrainingPipeline._sample_weights
+
+    @staticmethod
+    def get_cusum_event_mask() -> pd.Series | None:
+        """Return CUSUM event mask from the last create_labels() call.
+
+        Boolean Series where True = event bar selected by CUSUM filter.
+        Used by orchestrator for feature/label alignment when CUSUM is active.
+        """
+        return TrainingPipeline._cusum_event_mask
+
     # ======================================================================
     # DATA LOADING METHODS
     # Extracted from: ktrdr/training/train_strategy.py::StrategyTrainer::_load_price_data
@@ -435,6 +457,10 @@ class TrainingPipeline:
                 - LongTensor for context (BULLISH=0, BEARISH=1, NEUTRAL=2)
                 - LongTensor for regime (4-class)
         """
+        # Clear stale state from prior runs
+        TrainingPipeline._sample_weights = None
+        TrainingPipeline._cusum_event_mask = None
+
         source = label_config.get("source", "zigzag")
 
         # Resolve base timeframe price data
@@ -540,10 +566,101 @@ class TrainingPipeline:
             )
             return label_tensor
 
+        if source == "triple_barrier":
+            from ktrdr.training.triple_barrier_labeler import TripleBarrierLabeler
+
+            pt_multiplier = label_config.get("pt_multiplier", 2.0)
+            sl_multiplier = label_config.get("sl_multiplier", 1.5)
+            max_holding_period = label_config.get("max_holding_period", 50)
+            vol_span = label_config.get("vol_span", 50)
+            vol_method = label_config.get("vol_method", "atr")
+            logger.info(
+                f"TrainingPipeline.create_labels() - Triple barrier labels "
+                f"(pt={pt_multiplier}, sl={sl_multiplier}, "
+                f"max_hold={max_holding_period}, vol_span={vol_span}, "
+                f"vol_method={vol_method}, bars={len(tf_price_data)})"
+            )
+
+            tb_labeler = TripleBarrierLabeler(
+                pt_multiplier=pt_multiplier,
+                sl_multiplier=sl_multiplier,
+                max_holding_period=max_holding_period,
+                vol_span=vol_span,
+                vol_method=vol_method,
+            )
+
+            # Optionally apply CUSUM filter
+            cusum_threshold = label_config.get("cusum_threshold")
+            if cusum_threshold is not None:
+                from ktrdr.training.cusum_filter import CUSUMFilter
+
+                cusum_mult = label_config.get("cusum_multiplier", 0.5)
+                filt = CUSUMFilter(
+                    threshold=cusum_threshold if cusum_threshold > 0 else None,
+                    cusum_multiplier=cusum_mult,
+                    vol_span=vol_span,
+                )
+                events = filt.filter(tf_price_data)
+                event_count = events.sum()
+                logger.info(
+                    f"CUSUM filter: {event_count}/{len(tf_price_data)} bars selected "
+                    f"({event_count/len(tf_price_data)*100:.1f}%)"
+                )
+
+            labels = tb_labeler.generate_labels(tf_price_data)
+            stats = tb_labeler.get_label_statistics(labels)
+
+            # Apply CUSUM mask if filtering was done (before weights)
+            if cusum_threshold is not None:
+                event_indices = events[events].index
+                labels = labels[labels.index.isin(event_indices)]
+                # Store event mask for feature alignment in orchestrator
+                TrainingPipeline._cusum_event_mask = events
+                logger.info(f"After CUSUM filtering: {len(labels)} labels retained")
+
+            # Optionally compute uniqueness weights (on final filtered labels)
+            compute_weights = label_config.get("compute_weights", False)
+            if compute_weights:
+                from ktrdr.training.sample_weights import (
+                    compute_uniqueness_weights,
+                )
+
+                holding_periods = tb_labeler.get_holding_periods()
+                if holding_periods is not None:
+                    # Filter holding periods to match CUSUM-filtered labels
+                    if cusum_threshold is not None:
+                        holding_periods = holding_periods[
+                            holding_periods.index.isin(labels.index)
+                        ]
+                    weights = compute_uniqueness_weights(
+                        labels, holding_periods, normalize=True
+                    )
+                    TrainingPipeline._sample_weights = torch.FloatTensor(weights.values)
+                    logger.info(
+                        f"Computed uniqueness weights: "
+                        f"mean={weights.mean():.3f}, "
+                        f"min={weights.min():.3f}, max={weights.max():.3f}"
+                    )
+
+            # Map TB labels to class indices: +1→0 (BUY), 0→1 (HOLD), -1→2 (SELL)
+            class_map = {1: 0, 0: 1, -1: 2}
+            mapped = labels.map(class_map)
+            label_tensor = torch.LongTensor(mapped.values)
+
+            logger.info(
+                f"Generated {len(label_tensor)} triple barrier labels - "
+                f"TP={stats['take_profit_pct']:.1f}%, "
+                f"SL={stats['stop_loss_pct']:.1f}%, "
+                f"Expiry={stats['time_expiry_pct']:.1f}%, "
+                f"mean_hold={stats['mean_holding_period']:.1f} bars"
+            )
+            return label_tensor
+
         if source != "zigzag":
             raise ValueError(
                 f"Unknown label source '{source}'. "
-                f"Supported sources: 'zigzag', 'forward_return', 'context', 'regime'"
+                f"Supported sources: 'zigzag', 'forward_return', 'context', "
+                f"'regime', 'triple_barrier'"
             )
 
         # Default: ZigZag classification labels
