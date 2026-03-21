@@ -37,3 +37,27 @@
 - Sandbox on slot 3, port 8003 — already running with trained models
 - Existing regression models: `models/trend_regression_signal/1h_latest`, `models/range_regression_signal/1h_latest`
 - Run ensemble backtests via CLI: `uv run ktrdr backtest run <ensemble_config> EURUSD 1h --start 2024-01-01 --end 2024-12-31`
+
+## Task 5.3 Complete: Experiment 1 — TB vs Forward Return Comparison
+
+**Results (EURUSD 1h, 2024-01-01 to 2024-12-31):**
+
+| Metric | Regression (old) | TB Regime-Only | TB Context-Gated |
+|--------|-----------------|----------------|------------------|
+| Trade count | 194 | 303 | 229 |
+| Win rate | 11.3% | 9.2% | 11.8% |
+| Total PnL | -$9,639 | -$12,912 | -$9,491 |
+| Transitions | 359 | 359 | 359 |
+
+**Assessment: NO-GO for Phases 3-4**
+- All models losing badly (9-13% drawdown on $100K)
+- Win rates ~10% — far below 55% target or even random (50%)
+- TB models trade more (303) with worse win rate — suggests overconfident signal generation
+- Context gate shows observable effect (303→229 trades, 9.2→11.8% win rate) — mechanism works but signal quality too low
+- Neither early stopping fired during training (not converging meaningfully)
+
+**Gotchas:**
+- Ensemble backtest runs locally but needs torch (only in container). Must `docker exec` into backend
+- Trade attribute is `net_pnl` not `pnl`
+- `trend_regression_signal` model didn't exist — trained it from existing strategy for comparison
+- Models symlinked from CWD: `ln -sf ~/.ktrdr/shared/models models`
