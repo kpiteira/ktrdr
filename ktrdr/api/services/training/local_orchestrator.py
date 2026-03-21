@@ -277,6 +277,23 @@ class LocalTrainingOrchestrator:
                 "vol_crisis_threshold": labels_config.get("vol_crisis_threshold", 2.0),
                 "vol_lookback": labels_config.get("vol_lookback", 120),
             }
+        elif label_source == "triple_barrier":
+            label_config = {
+                "source": "triple_barrier",
+                "pt_multiplier": labels_config.get("pt_multiplier", 2.0),
+                "sl_multiplier": labels_config.get("sl_multiplier", 1.5),
+                "max_holding_period": labels_config.get("max_holding_period", 50),
+                "vol_span": labels_config.get("vol_span", 50),
+                "vol_method": labels_config.get("vol_method", "atr"),
+                "compute_weights": labels_config.get("compute_weights", False),
+            }
+            # Optional CUSUM filtering
+            cusum_threshold = labels_config.get("cusum_threshold")
+            if cusum_threshold is not None:
+                label_config["cusum_threshold"] = cusum_threshold
+                label_config["cusum_multiplier"] = labels_config.get(
+                    "cusum_multiplier", 0.5
+                )
         else:
             label_config = {
                 "source": "zigzag",
@@ -297,9 +314,9 @@ class LocalTrainingOrchestrator:
                 f"for regime labels (vol_lookback={vol_lookback}, "
                 f"horizon={labels_config.get('horizon', 24)})"
             )
-        elif label_source in ("forward_return", "context") and len(labels) < len(
-            features
-        ):
+        elif label_source in ("forward_return", "context", "triple_barrier") and len(
+            labels
+        ) < len(features):
             truncated_from = len(features)
             features = features[: len(labels)]  # type: ignore[assignment]
             logger.info(
@@ -733,6 +750,7 @@ class LocalTrainingOrchestrator:
             "forward_return": "regression",
             "context": "context_classification",
             "regime": "regime_classification",
+            "triple_barrier": "classification",
         }
         output_type = output_type_map.get(label_source, "classification")
 
