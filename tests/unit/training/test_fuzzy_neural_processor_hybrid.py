@@ -70,7 +70,10 @@ class TestHybridEncoding:
         assert names == resolved
         assert tensor.shape == (20, 3)
         # Raw RSI values should NOT be clipped to [0,1]
-        # (they're in 20-80 range originally)
+        # Verify raw column matches original values (in 20-80 range)
+        raw_from_tensor = tensor[:, 2].detach().cpu().numpy()
+        raw_expected = combined["5m_rsi_14_raw"].to_numpy()
+        np.testing.assert_allclose(raw_from_tensor, raw_expected, rtol=1e-6, atol=1e-6)
 
     def test_feature_ordering_preserved(self):
         """Feature ordering matches nn_inputs specification order."""

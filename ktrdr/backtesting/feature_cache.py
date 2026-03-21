@@ -164,6 +164,12 @@ class FeatureCache:
 
                 # Apply normalization using stored training params
                 norm_params = getattr(self.metadata, "normalization_params", {})
+                if raw_feature.feature_id not in norm_params:
+                    logger.warning(
+                        f"No normalization params for raw feature "
+                        f"'{raw_feature.feature_id}' — values will be on "
+                        f"original scale, which may differ from training"
+                    )
                 if raw_feature.feature_id in norm_params:
                     p = norm_params[raw_feature.feature_id]
                     method = p.get("method", "none")

@@ -7,7 +7,7 @@ This module defines the structure and validation rules for KTRDR configuration.
 import builtins
 from enum import Enum
 from pathlib import Path
-from typing import Any, Optional, Union
+from typing import Any, Literal, Optional, Union
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -767,7 +767,7 @@ class NNInputSpec(BaseModel):
         ...,
         description="Timeframes to apply this input to. 'all' for all training TFs.",
     )
-    normalization: Optional[str] = Field(
+    normalization: Optional[Literal["minmax", "zscore", "none"]] = Field(
         None,
         description="Normalization method for raw indicators: 'minmax', 'zscore', or 'none'",
     )
@@ -779,6 +779,10 @@ class NNInputSpec(BaseModel):
             raise ValueError("Specify either fuzzy_set or raw_indicator, not both")
         if not self.fuzzy_set and not self.raw_indicator:
             raise ValueError("Must specify either fuzzy_set or raw_indicator")
+        if self.normalization and self.fuzzy_set:
+            raise ValueError(
+                "normalization is only valid with raw_indicator, not fuzzy_set"
+            )
         return self
 
 

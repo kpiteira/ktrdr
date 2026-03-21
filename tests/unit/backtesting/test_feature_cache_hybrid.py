@@ -118,16 +118,20 @@ class TestFeatureCacheHybrid:
     def test_raw_feature_values_normalized(
         self, hybrid_strategy_config, hybrid_metadata, sample_data_100
     ):
-        """Raw features should be normalized using stored params."""
+        """Raw features should be normalized using stored params (min=10, max=90)."""
         cache = FeatureCache(hybrid_strategy_config, hybrid_metadata)
         result = cache.compute_features(sample_data_100)
 
-        # After minmax normalization with training params, values should
-        # be approximately in [0, 1] range (may slightly exceed if backtest
-        # data has values outside training range)
         raw_col = result["5m_rsi_14_raw"].dropna()
-        # At least verify normalization was applied (values shouldn't be in 0-100 RSI range)
-        assert raw_col.max() < 50  # RSI raw values are 0-100, normalized should be much smaller
+        # Normalization params: min=10, max=90 (from hybrid_metadata fixture)
+        # Formula: (x - 10) / (90 - 10)
+        # RSI on random price data is typically 30-70, so normalized ≈ 0.25-0.75
+        # Values MUST be different from raw RSI (which is 0-100 range)
+        assert raw_col.max() <= 1.5, "Normalized values should not exceed ~1.5"
+        assert raw_col.min() >= -0.5, "Normalized values should not go below ~-0.5"
+        # Crucially: if normalization was NOT applied, values would be in 30-70 range
+        # With normalization (min=10, max=90), they'd be in ~0.25-0.75 range
+        assert raw_col.max() < 2.0, "If > 2.0, normalization likely not applied"
 
     def test_per_bar_lookup_includes_raw(
         self, hybrid_strategy_config, hybrid_metadata, sample_data_100

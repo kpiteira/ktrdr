@@ -28,9 +28,9 @@ indicators:
     period: 14
   macd_12_26_9:
     type: macd
-    fast: 12
-    slow: 26
-    signal: 9
+    fast_period: 12
+    slow_period: 26
+    signal_period: 9
   roc_10:
     type: roc
     period: 10
