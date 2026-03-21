@@ -157,17 +157,69 @@ class TestNNInputSpec:
         assert spec.fuzzy_set == "rsi_fast"
         assert spec.timeframes == ["5m", "1h"]
 
-    def test_requires_fuzzy_set(self):
-        """NNInputSpec must have fuzzy_set field."""
+    def test_accepts_raw_indicator(self):
+        """NNInputSpec should accept raw_indicator as alternative to fuzzy_set."""
+        spec = NNInputSpec(raw_indicator="rsi_14", timeframes="all")
+        assert spec.raw_indicator == "rsi_14"
+        assert spec.fuzzy_set is None
+        assert spec.timeframes == "all"
+
+    def test_raw_indicator_with_normalization(self):
+        """NNInputSpec should accept normalization field for raw indicators."""
+        spec = NNInputSpec(
+            raw_indicator="rsi_14", timeframes=["5m"], normalization="minmax"
+        )
+        assert spec.raw_indicator == "rsi_14"
+        assert spec.normalization == "minmax"
+
+    def test_raw_indicator_zscore_normalization(self):
+        """NNInputSpec should accept zscore normalization."""
+        spec = NNInputSpec(
+            raw_indicator="adx_14", timeframes="all", normalization="zscore"
+        )
+        assert spec.normalization == "zscore"
+
+    def test_raw_indicator_no_normalization(self):
+        """NNInputSpec should accept none normalization (pass-through)."""
+        spec = NNInputSpec(
+            raw_indicator="rsi_14", timeframes="all", normalization="none"
+        )
+        assert spec.normalization == "none"
+
+    def test_rejects_both_fuzzy_and_raw(self):
+        """NNInputSpec must not have both fuzzy_set and raw_indicator."""
         with pytest.raises(ValidationError) as exc_info:
+            NNInputSpec(fuzzy_set="rsi_fast", raw_indicator="rsi_14", timeframes="all")
+        assert (
+            "either" in str(exc_info.value).lower()
+            or "not both" in str(exc_info.value).lower()
+        )
+
+    def test_rejects_neither_fuzzy_nor_raw(self):
+        """NNInputSpec must have at least one of fuzzy_set or raw_indicator."""
+        with pytest.raises(ValidationError):
             NNInputSpec(timeframes="all")
-        assert "fuzzy_set" in str(exc_info.value)
+        # Should fail validation requiring one of fuzzy_set or raw_indicator
+
+    def test_raw_indicator_dot_notation(self):
+        """NNInputSpec should accept dot notation for multi-output raw indicators."""
+        spec = NNInputSpec(
+            raw_indicator="macd_12_26_9.line", timeframes=["5m"], normalization="minmax"
+        )
+        assert spec.raw_indicator == "macd_12_26_9.line"
 
     def test_requires_timeframes(self):
         """NNInputSpec must have timeframes field."""
         with pytest.raises(ValidationError) as exc_info:
             NNInputSpec(fuzzy_set="rsi_fast")
         assert "timeframes" in str(exc_info.value)
+
+    def test_backward_compat_fuzzy_only(self):
+        """Existing configs with only fuzzy_set should work unchanged."""
+        spec = NNInputSpec(fuzzy_set="rsi_fast", timeframes="all")
+        assert spec.fuzzy_set == "rsi_fast"
+        assert spec.raw_indicator is None
+        assert spec.normalization is None
 
 
 class TestStrategyConfigurationV3:

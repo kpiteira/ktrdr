@@ -66,6 +66,10 @@ class ModelMetadata:
     # "classification" (default/zigzag), "regression", "context_classification", "regime_classification"
     output_type: str = "classification"
 
+    # Normalization parameters for raw indicator features (hybrid encoding)
+    # Maps feature_id -> {method, min, max} or {method, mean, std}
+    normalization_params: dict[str, dict[str, Any]] = field(default_factory=dict)
+
     # Context data (external data like FRED yields)
     context_data_config: Optional[list[dict[str, Any]]] = None
     context_source_ids: list[str] = field(default_factory=list)
@@ -96,6 +100,7 @@ class ModelMetadata:
             "training_timeframes": self.training_timeframes,
             "training_metrics": self.training_metrics,
             "output_type": self.output_type,
+            "normalization_params": self.normalization_params,
             "context_data_config": self.context_data_config,
             "context_source_ids": self.context_source_ids,
         }
@@ -128,6 +133,7 @@ class ModelMetadata:
             training_timeframes=data.get("training_timeframes", []),
             training_metrics=data.get("training_metrics", {}),
             output_type=data.get("output_type", "classification"),
+            normalization_params=data.get("normalization_params", {}),
             context_data_config=data.get("context_data_config"),
             context_source_ids=data.get("context_source_ids", []),
         )

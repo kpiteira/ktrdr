@@ -1,0 +1,149 @@
+name: trend_tb_gaussian_signal_v1
+version: "3.0"
+description: >
+  Signal model using Gaussian membership functions (3 overlapping sets per indicator)
+  with hybrid encoding (raw + fuzzy). Eliminates dead zones by ensuring every indicator
+  value produces non-zero membership in at least one set. Raw indicator values provide
+  additional signal when fuzzy memberships are low. Designed for triple-barrier labeling.
+
+training_data:
+  symbols:
+    mode: single
+    symbol: EURUSD
+  timeframes:
+    mode: multi_timeframe
+    list: ["5m", "1h"]
+    base_timeframe: "1h"
+  date_range:
+    start: "2024-01-01"
+    end: "2025-03-01"
+  history_required: 100
+
+indicators:
+  rsi_14:
+    type: rsi
+    period: 14
+  adx_14:
+    type: adx
+    period: 14
+  macd_12_26_9:
+    type: macd
+    fast_period: 12
+    slow_period: 26
+    signal_period: 9
+  roc_10:
+    type: roc
+    period: 10
+
+fuzzy_sets:
+  # RSI: 3 Gaussian sets covering full 0-100 range
+  # Wide σ ensures significant overlap → no dead zones
+  rsi_momentum:
+    indicator: rsi_14
+    low:
+      type: gaussian
+      parameters: [30, 15]
+    neutral:
+      type: gaussian
+      parameters: [50, 12]
+    high:
+      type: gaussian
+      parameters: [70, 15]
+
+  # ADX trend strength: 3 levels with generous overlap
+  adx_trend:
+    indicator: adx_14.adx
+    weak:
+      type: gaussian
+      parameters: [15, 10]
+    moderate:
+      type: gaussian
+      parameters: [30, 10]
+    strong:
+      type: gaussian
+      parameters: [50, 15]
+
+  # MACD line: centered around zero with wide spread for full domain coverage
+  macd_direction:
+    indicator: macd_12_26_9.line
+    bearish:
+      type: gaussian
+      parameters: [-0.002, 0.002]
+    neutral:
+      type: gaussian
+      parameters: [0, 0.0015]
+    bullish:
+      type: gaussian
+      parameters: [0.002, 0.002]
+
+  # ROC: momentum direction centered on zero with wide coverage
+  roc_momentum:
+    indicator: roc_10
+    falling:
+      type: gaussian
+      parameters: [-0.4, 0.35]
+    flat:
+      type: gaussian
+      parameters: [0, 0.25]
+    rising:
+      type: gaussian
+      parameters: [0.4, 0.35]
+
+nn_inputs:
+  # RSI: fuzzy memberships + raw value (hybrid)
+  - fuzzy_set: rsi_momentum
+    timeframes: all
+  - raw_indicator: rsi_14
+    timeframes: all
+    normalization: minmax
+
+  # ADX: fuzzy memberships + raw value (hybrid)
+  - fuzzy_set: adx_trend
+    timeframes: all
+  - raw_indicator: adx_14.adx
+    timeframes: all
+    normalization: minmax
+
+  # MACD: fuzzy memberships + raw value (hybrid)
+  - fuzzy_set: macd_direction
+    timeframes: all
+  - raw_indicator: macd_12_26_9.line
+    timeframes: all
+    normalization: zscore
+
+  # ROC: fuzzy memberships + raw value (hybrid)
+  - fuzzy_set: roc_momentum
+    timeframes: all
+  - raw_indicator: roc_10
+    timeframes: all
+    normalization: zscore
+
+model:
+  type: mlp
+  architecture:
+    hidden_layers: [128, 64, 32]
+    dropout: 0.3
+    activation: relu
+
+decisions:
+  output_format: classification
+  cost_model:
+    round_trip_cost: 0.003
+    min_edge_multiplier: 1.5
+  position_awareness: true
+  filters:
+    min_signal_separation: 4
+
+training:
+  labels:
+    source: triple_barrier
+    profit_target_atr: 2.0
+    stop_loss_atr: 1.5
+    max_holding_bars: 24
+    atr_period: 14
+  epochs: 100
+  learning_rate: 0.001
+  batch_size: 64
+  early_stopping:
+    patience: 15
+    min_delta: 0.001

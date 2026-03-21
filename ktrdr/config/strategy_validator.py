@@ -911,7 +911,7 @@ fuzzy_sets:
     medium: {{type: triangle, parameters: [low_mid, mid, high_mid]}}
     high: {{type: trapezoid, parameters: [mid, high_mid, max, max]}}
 
-Missing feature_ids: {', '.join(missing_list)}
+Missing feature_ids: {", ".join(missing_list)}
 """
             result.suggestions.append(suggestion.strip())
 
@@ -1297,9 +1297,61 @@ def validate_v3_strategy(
 
     # Validation 2: Validate fuzzy_set references in nn_inputs
     for idx, nn_input in enumerate(config.nn_inputs):
-        fuzzy_set_ref = nn_input.fuzzy_set
+        if nn_input.raw_indicator:
+            # Raw indicator — validate that indicator_id exists in indicators dict
+            raw_ref = nn_input.raw_indicator
+            # Parse dot notation (e.g., "macd_12_26_9.line" → "macd_12_26_9")
+            if "." in raw_ref:
+                base_indicator, output_name = raw_ref.split(".", 1)
+            else:
+                base_indicator = raw_ref
+                output_name = None
 
-        if fuzzy_set_ref not in config.fuzzy_sets:
+            if base_indicator not in config.indicators:
+                errors.append(
+                    f"nn_inputs[{idx}].raw_indicator: "
+                    f"'{base_indicator}' not found in indicators. "
+                    f"Available indicators: {', '.join(sorted(config.indicators.keys()))}"
+                )
+            else:
+                used_indicators.add(base_indicator)
+
+                # Validate dot-notation output name
+                if output_name is not None:
+                    indicator_def = config.indicators[base_indicator]
+                    indicator_type = indicator_def.type
+                    try:
+                        registry = _get_indicator_registry()
+                        indicator_cls = registry.get(indicator_type)
+                        if indicator_cls is None:
+                            logger.warning(
+                                f"Unknown indicator type '{indicator_type}' "
+                                f"for raw_indicator dot notation validation"
+                            )
+                        elif not indicator_cls.is_multi_output():
+                            errors.append(
+                                f"nn_inputs[{idx}].raw_indicator: "
+                                f"'{base_indicator}' is single-output but "
+                                f"dot notation '.{output_name}' was used"
+                            )
+                        else:
+                            valid_outputs = indicator_cls.get_output_names()
+                            if output_name not in valid_outputs:
+                                errors.append(
+                                    f"nn_inputs[{idx}].raw_indicator: "
+                                    f"'{output_name}' is not a valid output of "
+                                    f"'{indicator_type}'. "
+                                    f"Valid outputs: {', '.join(valid_outputs)}"
+                                )
+                    except Exception as e:
+                        logger.warning(
+                            f"Could not validate raw_indicator dot notation "
+                            f"for {indicator_type}: {e}"
+                        )
+            continue
+
+        fuzzy_set_ref = nn_input.fuzzy_set
+        if fuzzy_set_ref and fuzzy_set_ref not in config.fuzzy_sets:
             errors.append(
                 f"nn_inputs[{idx}].fuzzy_set: "
                 f"'{fuzzy_set_ref}' not found in fuzzy_sets. "

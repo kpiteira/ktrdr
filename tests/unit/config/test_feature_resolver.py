@@ -346,6 +346,178 @@ class TestFeatureResolver:
         assert features[2].membership_name == "high"
 
 
+class TestFeatureResolverRawIndicators:
+    """Test FeatureResolver handling of raw_indicator specs."""
+
+    def _make_hybrid_config(self, nn_inputs, timeframes=None):
+        """Helper to create a v3 config with given nn_inputs."""
+        if timeframes is None:
+            timeframes = {
+                "mode": "multi_timeframe",
+                "list": ["5m", "1h"],
+                "base_timeframe": "1h",
+            }
+        return StrategyConfigurationV3(
+            name="test_hybrid",
+            version="3.0",
+            training_data=TrainingDataConfiguration(
+                symbols={"mode": "single", "list": ["EURUSD"]},
+                timeframes=timeframes,
+                history_required=100,
+            ),
+            indicators={
+                "rsi_14": IndicatorDefinition(type="rsi", **{"period": 14}),
+                "macd_12_26_9": IndicatorDefinition(
+                    type="macd",
+                    **{"fast_period": 12, "slow_period": 26, "signal_period": 9},
+                ),
+            },
+            fuzzy_sets={
+                "rsi_fast": FuzzySetDefinition(
+                    indicator="rsi_14",
+                    **{
+                        "oversold": {"type": "triangular", "parameters": [0, 25, 40]},
+                        "overbought": {
+                            "type": "triangular",
+                            "parameters": [60, 75, 100],
+                        },
+                    },
+                ),
+            },
+            nn_inputs=nn_inputs,
+            model={"type": "mlp", "architecture": {"hidden_layers": [64, 32]}},
+            decisions={"output_format": "classification"},
+            training={"method": "supervised", "labels": {"source": "zigzag"}},
+        )
+
+    def test_resolve_raw_indicator(self):
+        """Test resolving a raw_indicator nn_input."""
+        config = self._make_hybrid_config(
+            nn_inputs=[
+                NNInputSpec(raw_indicator="rsi_14", timeframes=["5m"]),
+            ]
+        )
+        resolver = FeatureResolver()
+        features = resolver.resolve(config)
+
+        assert len(features) == 1
+        f = features[0]
+        assert f.feature_id == "5m_rsi_14_raw"
+        assert f.timeframe == "5m"
+        assert f.fuzzy_set_id == "__raw__"
+        assert f.membership_name == "raw"
+        assert f.indicator_id == "rsi_14"
+        assert f.indicator_output is None
+
+    def test_resolve_raw_indicator_all_timeframes(self):
+        """Test raw_indicator with timeframes: all expands correctly."""
+        config = self._make_hybrid_config(
+            nn_inputs=[
+                NNInputSpec(raw_indicator="rsi_14", timeframes="all"),
+            ]
+        )
+        resolver = FeatureResolver()
+        features = resolver.resolve(config)
+
+        assert len(features) == 2
+        assert features[0].feature_id == "5m_rsi_14_raw"
+        assert features[1].feature_id == "1h_rsi_14_raw"
+
+    def test_resolve_raw_indicator_dot_notation(self):
+        """Test raw_indicator with multi-output dot notation."""
+        config = self._make_hybrid_config(
+            nn_inputs=[
+                NNInputSpec(
+                    raw_indicator="macd_12_26_9.line",
+                    timeframes=["1h"],
+                    normalization="minmax",
+                ),
+            ]
+        )
+        resolver = FeatureResolver()
+        features = resolver.resolve(config)
+
+        assert len(features) == 1
+        f = features[0]
+        assert f.feature_id == "1h_macd_12_26_9.line_raw"
+        assert f.indicator_id == "macd_12_26_9"
+        assert f.indicator_output == "line"
+
+    def test_resolve_mixed_fuzzy_and_raw(self):
+        """Test mixed nn_inputs with both fuzzy and raw entries."""
+        config = self._make_hybrid_config(
+            nn_inputs=[
+                NNInputSpec(fuzzy_set="rsi_fast", timeframes=["5m"]),
+                NNInputSpec(
+                    raw_indicator="rsi_14", timeframes=["5m"], normalization="minmax"
+                ),
+            ]
+        )
+        resolver = FeatureResolver()
+        features = resolver.resolve(config)
+
+        # 2 fuzzy features (oversold, overbought) + 1 raw
+        assert len(features) == 3
+
+        # Order preserved: fuzzy first, then raw
+        assert features[0].feature_id == "5m_rsi_fast_oversold"
+        assert features[1].feature_id == "5m_rsi_fast_overbought"
+        assert features[2].feature_id == "5m_rsi_14_raw"
+        assert features[2].fuzzy_set_id == "__raw__"
+
+    def test_resolve_mixed_order_preserved(self):
+        """Test that interleaved fuzzy/raw entries preserve nn_inputs order."""
+        config = self._make_hybrid_config(
+            nn_inputs=[
+                NNInputSpec(fuzzy_set="rsi_fast", timeframes=["5m"]),
+                NNInputSpec(
+                    raw_indicator="rsi_14", timeframes=["5m"], normalization="minmax"
+                ),
+                NNInputSpec(fuzzy_set="rsi_fast", timeframes=["1h"]),
+            ]
+        )
+        resolver = FeatureResolver()
+        features = resolver.resolve(config)
+
+        feature_ids = [f.feature_id for f in features]
+        # Order: fuzzy 5m (2) + raw 5m (1) + fuzzy 1h (2)
+        assert feature_ids == [
+            "5m_rsi_fast_oversold",
+            "5m_rsi_fast_overbought",
+            "5m_rsi_14_raw",
+            "1h_rsi_fast_oversold",
+            "1h_rsi_fast_overbought",
+        ]
+
+    def test_backward_compat_fuzzy_only(self):
+        """Test that configs with only fuzzy_set entries still work."""
+        config = self._make_hybrid_config(
+            nn_inputs=[
+                NNInputSpec(fuzzy_set="rsi_fast", timeframes="all"),
+            ]
+        )
+        resolver = FeatureResolver()
+        features = resolver.resolve(config)
+
+        # All should be fuzzy features, no raw
+        assert all(f.fuzzy_set_id != "__raw__" for f in features)
+        assert len(features) == 4  # 2 timeframes × 2 memberships
+
+    def test_get_indicators_includes_raw(self):
+        """Test that get_indicators_for_timeframe includes raw indicator IDs."""
+        config = self._make_hybrid_config(
+            nn_inputs=[
+                NNInputSpec(fuzzy_set="rsi_fast", timeframes=["5m"]),
+                NNInputSpec(raw_indicator="rsi_14", timeframes=["5m"]),
+            ]
+        )
+        resolver = FeatureResolver()
+        features = resolver.resolve(config)
+
+        indicators_5m = resolver.get_indicators_for_timeframe(features, "5m")
+        assert "rsi_14" in indicators_5m
+
+
 def test_resolve_handles_single_timeframe_mode():
     """Test that resolver handles SINGLE timeframe mode correctly."""
     config = StrategyConfigurationV3(
