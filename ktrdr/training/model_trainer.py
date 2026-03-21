@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any, Optional
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import DataLoader, TensorDataset
+from torch.utils.data import DataLoader, TensorDataset, WeightedRandomSampler
 
 from ktrdr.async_infrastructure.cancellation import (
     CancellationError,
@@ -197,6 +197,7 @@ class ModelTrainer:
         y_train: torch.Tensor,
         X_val: Optional[torch.Tensor] = None,
         y_val: Optional[torch.Tensor] = None,
+        sample_weights: Optional[torch.Tensor] = None,
     ) -> dict[str, Any]:
         """Train the neural network model.
 
@@ -206,6 +207,9 @@ class ModelTrainer:
             y_train: Training labels
             X_val: Optional validation features
             y_val: Optional validation labels
+            sample_weights: Optional per-sample weights for weighted sampling.
+                When provided, uses WeightedRandomSampler instead of uniform
+                shuffle. Higher-weighted samples are sampled more frequently.
 
         Returns:
             Training history and metrics
@@ -262,13 +266,35 @@ class ModelTrainer:
 
         # Create optimized data loader with pinned memory for GPU transfer
         train_dataset = TensorDataset(X_train_cpu, y_train_cpu)
-        train_loader = DataLoader(
-            train_dataset,
-            batch_size=batch_size,
-            shuffle=True,
-            pin_memory=use_pin_memory,  # Enable pinned memory for CUDA only (not MPS)
-            num_workers=0,  # Keep 0 for now (tensors already in memory, workers add overhead)
-        )
+
+        # Use WeightedRandomSampler when sample weights provided (e.g., TB uniqueness weights)
+        # This samples higher-weighted samples more frequently, replacing uniform shuffle.
+        if sample_weights is not None:
+            if len(sample_weights) != len(train_dataset):
+                raise ValueError(
+                    f"sample_weights length ({len(sample_weights)}) does not match "
+                    f"number of training samples ({len(train_dataset)})."
+                )
+            sampler = WeightedRandomSampler(
+                weights=sample_weights.cpu().double(),  # type: ignore[arg-type]
+                num_samples=len(train_dataset),
+                replacement=True,
+            )
+            train_loader = DataLoader(
+                train_dataset,
+                batch_size=batch_size,
+                sampler=sampler,
+                pin_memory=use_pin_memory,
+                num_workers=0,
+            )
+        else:
+            train_loader = DataLoader(
+                train_dataset,
+                batch_size=batch_size,
+                shuffle=True,
+                pin_memory=use_pin_memory,
+                num_workers=0,
+            )
 
         # Move validation data to GPU (smaller, benefits from staying on GPU)
         if X_val is not None:

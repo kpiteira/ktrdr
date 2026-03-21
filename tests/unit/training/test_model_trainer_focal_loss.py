@@ -61,7 +61,9 @@ class TestFocalLoss:
         focal = FocalLoss(gamma=0.0)
         ce = nn.CrossEntropyLoss()
 
-        assert focal(logits, targets).item() == pytest.approx(ce(logits, targets).item(), rel=1e-4)
+        assert focal(logits, targets).item() == pytest.approx(
+            ce(logits, targets).item(), rel=1e-4
+        )
 
     def test_downweights_easy_examples(self):
         """Focal loss gives less weight to well-classified examples."""
@@ -84,7 +86,9 @@ class TestFocalLoss:
         focal = FocalLoss(gamma=2.0)
 
         ce_ratio = ce(hard_logits, targets).item() / ce(easy_logits, targets).item()
-        focal_ratio = focal(hard_logits, targets).item() / focal(easy_logits, targets).item()
+        focal_ratio = (
+            focal(hard_logits, targets).item() / focal(easy_logits, targets).item()
+        )
 
         assert focal_ratio > ce_ratio
 
@@ -176,7 +180,9 @@ class TestModelTrainerFocalLoss:
         torch.manual_seed(42)
         # 80% class 0, 10% class 1, 10% class 2
         X_train = torch.randn(200, 8)
-        y_train = torch.cat([torch.zeros(160), torch.ones(20), torch.full((20,), 2)]).long()
+        y_train = torch.cat(
+            [torch.zeros(160), torch.ones(20), torch.full((20,), 2)]
+        ).long()
         X_val = torch.randn(50, 8)
         y_val = torch.randint(0, 3, (50,))
 
@@ -188,6 +194,4 @@ class TestModelTrainerFocalLoss:
             model=model, X_train=X_train, y_train=y_train, X_val=X_val, y_val=y_val
         )
         assert result["final_train_loss"] > 0
-        assert not any(
-            torch.isnan(torch.tensor(m.train_loss)) for m in trainer.history
-        )
+        assert not any(torch.isnan(torch.tensor(m.train_loss)) for m in trainer.history)

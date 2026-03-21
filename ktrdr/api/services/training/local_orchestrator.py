@@ -338,25 +338,89 @@ class LocalTrainingOrchestrator:
             f"V3 features: {features_aligned.shape}, labels: {labels_aligned.shape}"
         )
 
-        # Split data
+        # Split data — use purged split for triple_barrier to prevent leakage
         data_split = training_section.get("data_split", {})
         train_ratio = data_split.get("train", 0.7)
         val_ratio = data_split.get("validation", 0.15)
+        sample_weights_for_training = None
 
         total_samples = len(features_aligned)
-        train_end = int(total_samples * train_ratio)
-        val_end = int(total_samples * (train_ratio + val_ratio))
 
-        X_train = features_aligned[:train_end]
-        y_train = labels_aligned[:train_end]
-        X_val = features_aligned[train_end:val_end]
-        y_val = labels_aligned[train_end:val_end]
-        X_test = features_aligned[val_end:]
-        y_test = labels_aligned[val_end:]
+        if label_source == "triple_barrier":
+            from ktrdr.training.sample_weights import purged_train_val_split
 
-        logger.info(
-            f"V3 splits: train={len(X_train)}, val={len(X_val)}, test={len(X_test)}"
-        )
+            # Get holding periods for purged split
+            # Reconstruct holding periods: TB labeler stores them, but we need
+            # to create a series of the right length for the aligned data.
+            # Use max_holding_period as conservative estimate for all samples
+            # (actual holding periods vary but aren't accessible after alignment).
+            max_hold = labels_config.get("max_holding_period", 50)
+            import pandas as pd
+
+            holding_periods_series = pd.Series(
+                [max_hold] * total_samples,
+                index=pd.RangeIndex(total_samples),
+            )
+
+            # Combined val+test ratio: purged split creates train vs "val" where
+            # "val" = val + test from the config split
+            test_ratio = data_split.get("test", max(0.0, 1.0 - train_ratio - val_ratio))
+            combined_val_test_ratio = min(val_ratio + test_ratio, 1.0)
+            embargo_pct = 0.01  # 1% embargo buffer
+
+            train_idx, valtest_idx = purged_train_val_split(
+                pd.Series(range(total_samples)),
+                holding_periods_series,
+                val_ratio=combined_val_test_ratio,
+                embargo_pct=embargo_pct,
+            )
+
+            # Split valtest into val and test (temporal, no purging needed)
+            if len(valtest_idx) > 0:
+                val_fraction = val_ratio / combined_val_test_ratio
+                val_count = int(len(valtest_idx) * val_fraction)
+                val_idx = valtest_idx[:val_count]
+                test_idx = valtest_idx[val_count:]
+            else:
+                val_idx = valtest_idx
+                test_idx = np.array([], dtype=np.intp)
+
+            X_train = features_aligned[train_idx]
+            y_train = labels_aligned[train_idx]
+            X_val = features_aligned[val_idx]
+            y_val = labels_aligned[val_idx]
+            X_test = features_aligned[test_idx] if len(test_idx) > 0 else None
+            y_test = labels_aligned[test_idx] if len(test_idx) > 0 else None
+
+            # Get sample weights for weighted sampling (if computed)
+            tb_weights = TrainingPipeline.get_sample_weights()
+            if tb_weights is not None and len(tb_weights) == total_samples:
+                sample_weights_for_training = tb_weights[train_idx]
+                logger.info(
+                    f"Using uniqueness weights for training "
+                    f"(mean={sample_weights_for_training.mean():.3f})"
+                )
+
+            logger.info(
+                f"V3 purged splits: train={len(X_train)} "
+                f"(purged from {int(total_samples * (1 - combined_val_test_ratio))}), "
+                f"val={len(X_val)}, test={len(test_idx)}, "
+                f"embargo={embargo_pct*100:.0f}%"
+            )
+        else:
+            train_end = int(total_samples * train_ratio)
+            val_end = int(total_samples * (train_ratio + val_ratio))
+
+            X_train = features_aligned[:train_end]
+            y_train = labels_aligned[:train_end]
+            X_val = features_aligned[train_end:val_end]
+            y_val = labels_aligned[train_end:val_end]
+            X_test = features_aligned[val_end:]
+            y_test = labels_aligned[val_end:]
+
+            logger.info(
+                f"V3 splits: train={len(X_train)}, val={len(X_val)}, test={len(X_test)}"
+            )
 
         # Create model
         decisions_config = config.get("decisions", {})
@@ -417,6 +481,7 @@ class LocalTrainingOrchestrator:
             cancellation_token=self._token,
             checkpoint_callback=self._checkpoint_callback,
             resume_context=self._resume_context,
+            sample_weights=sample_weights_for_training,
         )
 
         # Evaluate model
