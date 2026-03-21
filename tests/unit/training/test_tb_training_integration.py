@@ -7,10 +7,11 @@ are correctly wired into the training orchestrator for TB labels.
 import numpy as np
 import pandas as pd
 import pytest
-import torch
 
-from ktrdr.training.sample_weights import purged_train_val_split
-from ktrdr.training.training_pipeline import TrainingPipeline
+torch = pytest.importorskip("torch")
+
+from ktrdr.training.sample_weights import purged_train_val_split  # noqa: E402
+from ktrdr.training.training_pipeline import TrainingPipeline  # noqa: E402
 
 
 class TestPurgedSplitIntegration:

@@ -807,6 +807,9 @@ class TrainingPipeline:
             checkpoint_callback: Optional callback for checkpointing after each epoch.
                 Called with kwargs: epoch, model, optimizer, scheduler, trainer.
             resume_context: Optional resume context for resumed training from checkpoint.
+            sample_weights: Optional per-sample weights (length must match X_train).
+                When provided, uses WeightedRandomSampler for importance sampling
+                (e.g., uniqueness weights from triple barrier labels).
 
         Returns:
             Training results dict containing:

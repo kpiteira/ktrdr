@@ -99,7 +99,7 @@ def purged_train_val_split(
 
     # Embargo: remove embargo_pct * n samples before val boundary
     embargo_size = int(embargo_pct * n)
-    embargo_start = val_start - embargo_size
+    embargo_start = max(0, val_start - embargo_size)
 
     # Purge: remove training samples whose active period overlaps val set
     # Sample i has active period [i, i + holding_periods[i])

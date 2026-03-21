@@ -364,7 +364,8 @@ class LocalTrainingOrchestrator:
 
             # Combined val+test ratio: purged split creates train vs "val" where
             # "val" = val + test from the config split
-            combined_val_test_ratio = val_ratio + data_split.get("test", 0.15)
+            test_ratio = data_split.get("test", max(0.0, 1.0 - train_ratio - val_ratio))
+            combined_val_test_ratio = min(val_ratio + test_ratio, 1.0)
             embargo_pct = 0.01  # 1% embargo buffer
 
             train_idx, valtest_idx = purged_train_val_split(

@@ -6,11 +6,12 @@ signals through the DecisionFunction classification path.
 
 import pandas as pd
 import pytest
-import torch
 
-from ktrdr.backtesting.decision_function import DecisionFunction
-from ktrdr.backtesting.position_manager import PositionStatus
-from ktrdr.decision.base import Signal
+torch = pytest.importorskip("torch")
+
+from ktrdr.backtesting.decision_function import DecisionFunction  # noqa: E402
+from ktrdr.backtesting.position_manager import PositionStatus  # noqa: E402
+from ktrdr.decision.base import Signal  # noqa: E402
 
 
 @pytest.fixture

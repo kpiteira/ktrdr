@@ -270,9 +270,14 @@ class ModelTrainer:
         # Use WeightedRandomSampler when sample weights provided (e.g., TB uniqueness weights)
         # This samples higher-weighted samples more frequently, replacing uniform shuffle.
         if sample_weights is not None:
+            if len(sample_weights) != len(train_dataset):
+                raise ValueError(
+                    f"sample_weights length ({len(sample_weights)}) does not match "
+                    f"number of training samples ({len(train_dataset)})."
+                )
             sampler = WeightedRandomSampler(
-                weights=sample_weights.cpu().double().tolist(),
-                num_samples=len(sample_weights),
+                weights=sample_weights.cpu().double(),  # type: ignore[arg-type]
+                num_samples=len(train_dataset),
                 replacement=True,
             )
             train_loader = DataLoader(
