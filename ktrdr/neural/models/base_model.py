@@ -54,30 +54,6 @@ class BaseNeuralModel(ABC):
         """
         pass
 
-    def train(
-        self,
-        X: torch.Tensor,
-        y: torch.Tensor,
-        validation_data: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
-    ) -> dict[str, Any]:
-        """Train the model with fuzzy features and labels.
-
-        Args:
-            X: Training features tensor
-            y: Training labels tensor
-            validation_data: Optional tuple of (X_val, y_val) for validation
-
-        Returns:
-            Dictionary containing training history and metrics
-        """
-        if self.model is None:
-            raise ValueError("Model not built. Call build_model() first.")
-
-        # Training implementation would go here
-        # For now, return placeholder
-        self.is_trained = True
-        return {"status": "training_not_implemented"}
-
     def predict(
         self, features: torch.Tensor, market_timestamp: Optional[pd.Timestamp] = None
     ) -> dict[str, Any]:
