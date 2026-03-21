@@ -74,19 +74,6 @@ class FeatureResolver:
 
         # Process each nn_input in order
         for nn_input in config.nn_inputs:
-            fuzzy_set_id = nn_input.fuzzy_set
-
-            # Get fuzzy set definition
-            fuzzy_set = config.fuzzy_sets[fuzzy_set_id]
-
-            # Parse indicator reference (handle dot notation)
-            indicator_id, indicator_output = self._parse_indicator_reference(
-                fuzzy_set.indicator
-            )
-
-            # Get membership function names in order
-            membership_names = fuzzy_set.get_membership_names()
-
             # Expand timeframes
             timeframes_to_use: list[str]
             if nn_input.timeframes == "all":
@@ -94,16 +81,49 @@ class FeatureResolver:
             else:
                 timeframes_to_use = nn_input.timeframes  # type: ignore[assignment]
 
-            # Generate features in order: timeframes × memberships
-            for timeframe in timeframes_to_use:
-                for membership_name in membership_names:
-                    feature_id = f"{timeframe}_{fuzzy_set_id}_{membership_name}"
+            if nn_input.fuzzy_set:
+                # Fuzzy set path (existing)
+                fuzzy_set_id = nn_input.fuzzy_set
+                fuzzy_set = config.fuzzy_sets[fuzzy_set_id]
+
+                # Parse indicator reference (handle dot notation)
+                indicator_id, indicator_output = self._parse_indicator_reference(
+                    fuzzy_set.indicator
+                )
+
+                # Get membership function names in order
+                membership_names = fuzzy_set.get_membership_names()
+
+                # Generate features in order: timeframes × memberships
+                for timeframe in timeframes_to_use:
+                    for membership_name in membership_names:
+                        feature_id = f"{timeframe}_{fuzzy_set_id}_{membership_name}"
+                        features.append(
+                            ResolvedFeature(
+                                feature_id=feature_id,
+                                timeframe=timeframe,
+                                fuzzy_set_id=fuzzy_set_id,
+                                membership_name=membership_name,
+                                indicator_id=indicator_id,
+                                indicator_output=indicator_output,
+                            )
+                        )
+
+            elif nn_input.raw_indicator:
+                # Raw indicator path (new — hybrid encoding)
+                raw_ref = nn_input.raw_indicator
+                indicator_id, indicator_output = self._parse_indicator_reference(
+                    raw_ref
+                )
+
+                for timeframe in timeframes_to_use:
+                    feature_id = f"{timeframe}_{raw_ref}_raw"
                     features.append(
                         ResolvedFeature(
                             feature_id=feature_id,
                             timeframe=timeframe,
-                            fuzzy_set_id=fuzzy_set_id,
-                            membership_name=membership_name,
+                            fuzzy_set_id="__raw__",
+                            membership_name="raw",
                             indicator_id=indicator_id,
                             indicator_output=indicator_output,
                         )

@@ -49,6 +49,9 @@ class FuzzyNeuralProcessor:
             len(resolved_features) if resolved_features else None
         )
 
+        # Normalization parameters for raw indicators (stored for inference)
+        self.normalization_params: dict[str, dict[str, Any]] = {}
+
     def prepare_input(
         self,
         fuzzy_data: pd.DataFrame,
@@ -544,6 +547,9 @@ class FuzzyNeuralProcessor:
         out_of_range_features = []
 
         for i, name in enumerate(feature_names):
+            # Skip raw indicator features — they aren't bounded to [0,1]
+            if name.endswith("_raw"):
+                continue
             if min_vals[i] < -tolerance or max_vals[i] > 1 + tolerance:
                 out_of_range_features.append(
                     {"feature": name, "min": min_vals[i], "max": max_vals[i]}
@@ -570,6 +576,109 @@ class FuzzyNeuralProcessor:
             logger.warning(
                 "This may indicate missing indicators or fuzzy configuration issues."
             )
+
+    def normalize_raw_features(
+        self,
+        data: pd.DataFrame,
+        raw_feature_configs: dict[str, str],
+    ) -> None:
+        """Normalize raw indicator columns in-place and store parameters.
+
+        Computes normalization on the provided data (training set) and stores
+        the parameters for consistent application during inference/backtest.
+
+        Args:
+            data: DataFrame containing raw feature columns to normalize (modified in-place)
+            raw_feature_configs: Mapping of feature_id → normalization method
+                                 ('minmax', 'zscore', or 'none')
+        """
+        for feature_id, method in raw_feature_configs.items():
+            if feature_id not in data.columns:
+                logger.warning(
+                    f"Raw feature '{feature_id}' not in data, skipping normalization"
+                )
+                continue
+
+            col = data[feature_id]
+
+            if method == "minmax":
+                col_min = float(col.min())
+                col_max = float(col.max())
+                denom = col_max - col_min
+                if denom == 0:
+                    logger.warning(f"Constant column '{feature_id}', minmax yields 0")
+                    data[feature_id] = 0.0
+                else:
+                    data[feature_id] = (col - col_min) / denom
+                self.normalization_params[feature_id] = {
+                    "method": "minmax",
+                    "min": col_min,
+                    "max": col_max,
+                }
+
+            elif method == "zscore":
+                col_mean = float(col.mean())
+                col_std = float(col.std())
+                if col_std == 0:
+                    logger.warning(
+                        f"Zero-variance column '{feature_id}', zscore yields 0"
+                    )
+                    data[feature_id] = 0.0
+                else:
+                    data[feature_id] = (col - col_mean) / col_std
+                self.normalization_params[feature_id] = {
+                    "method": "zscore",
+                    "mean": col_mean,
+                    "std": col_std,
+                }
+
+            elif method == "none":
+                self.normalization_params[feature_id] = {"method": "none"}
+
+            else:
+                logger.warning(
+                    f"Unknown normalization method '{method}' for '{feature_id}', skipping"
+                )
+                self.normalization_params[feature_id] = {"method": "none"}
+
+    def apply_normalization(
+        self,
+        data: pd.DataFrame,
+        params: Optional[dict[str, dict[str, Any]]] = None,
+    ) -> None:
+        """Apply previously computed normalization parameters to data (in-place).
+
+        Used during backtest/inference to normalize raw features using
+        training-time statistics.
+
+        Args:
+            data: DataFrame containing raw feature columns to normalize
+            params: Normalization parameters (defaults to self.normalization_params)
+        """
+        if params is None:
+            params = self.normalization_params
+
+        for feature_id, p in params.items():
+            if feature_id not in data.columns:
+                continue
+
+            method = p.get("method", "none")
+            col = data[feature_id]
+
+            if method == "minmax":
+                denom = p["max"] - p["min"]
+                if denom == 0:
+                    data[feature_id] = 0.0
+                else:
+                    data[feature_id] = (col - p["min"]) / denom
+
+            elif method == "zscore":
+                if p["std"] == 0:
+                    data[feature_id] = 0.0
+                else:
+                    data[feature_id] = (col - p["mean"]) / p["std"]
+
+            # "none" → no-op
 
     def get_feature_count(self) -> int:
         """Get total number of features that will be generated.

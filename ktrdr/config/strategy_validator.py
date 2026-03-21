@@ -911,7 +911,7 @@ fuzzy_sets:
     medium: {{type: triangle, parameters: [low_mid, mid, high_mid]}}
     high: {{type: trapezoid, parameters: [mid, high_mid, max, max]}}
 
-Missing feature_ids: {', '.join(missing_list)}
+Missing feature_ids: {", ".join(missing_list)}
 """
             result.suggestions.append(suggestion.strip())
 
@@ -1297,9 +1297,21 @@ def validate_v3_strategy(
 
     # Validation 2: Validate fuzzy_set references in nn_inputs
     for idx, nn_input in enumerate(config.nn_inputs):
-        fuzzy_set_ref = nn_input.fuzzy_set
+        if nn_input.raw_indicator:
+            # Raw indicator — validate that indicator_id exists in indicators dict
+            raw_ref = nn_input.raw_indicator
+            # Parse dot notation (e.g., "macd_12_26_9.line" → "macd_12_26_9")
+            base_indicator = raw_ref.split(".", 1)[0] if "." in raw_ref else raw_ref
+            if base_indicator not in config.indicators:
+                errors.append(
+                    f"nn_inputs[{idx}].raw_indicator: "
+                    f"'{base_indicator}' not found in indicators. "
+                    f"Available indicators: {', '.join(sorted(config.indicators.keys()))}"
+                )
+            continue
 
-        if fuzzy_set_ref not in config.fuzzy_sets:
+        fuzzy_set_ref = nn_input.fuzzy_set
+        if fuzzy_set_ref and fuzzy_set_ref not in config.fuzzy_sets:
             errors.append(
                 f"nn_inputs[{idx}].fuzzy_set: "
                 f"'{fuzzy_set_ref}' not found in fuzzy_sets. "

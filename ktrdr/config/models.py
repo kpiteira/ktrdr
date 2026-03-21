@@ -749,13 +749,37 @@ class FuzzySetDefinition(BaseModel):
 
 
 class NNInputSpec(BaseModel):
-    """Specification for neural network inputs."""
+    """Specification for neural network inputs.
 
-    fuzzy_set: str = Field(..., description="fuzzy_set_id to include")
+    Each nn_input specifies either a fuzzy_set (for fuzzy membership features)
+    or a raw_indicator (for raw normalized indicator values). These are mutually
+    exclusive — exactly one must be specified.
+    """
+
+    fuzzy_set: Optional[str] = Field(
+        None, description="fuzzy_set_id to include as membership features"
+    )
+    raw_indicator: Optional[str] = Field(
+        None,
+        description="indicator_id for raw values (e.g., 'rsi_14' or 'macd_12_26_9.line')",
+    )
     timeframes: Union[list[str], str] = Field(
         ...,
-        description="Timeframes to apply this fuzzy set to. 'all' for all training TFs.",
+        description="Timeframes to apply this input to. 'all' for all training TFs.",
     )
+    normalization: Optional[str] = Field(
+        None,
+        description="Normalization method for raw indicators: 'minmax', 'zscore', or 'none'",
+    )
+
+    @model_validator(mode="after")
+    def exactly_one_input_type(self) -> "NNInputSpec":
+        """Validate that exactly one of fuzzy_set or raw_indicator is specified."""
+        if self.fuzzy_set and self.raw_indicator:
+            raise ValueError("Specify either fuzzy_set or raw_indicator, not both")
+        if not self.fuzzy_set and not self.raw_indicator:
+            raise ValueError("Must specify either fuzzy_set or raw_indicator")
+        return self
 
 
 class StrategyConfigurationV3(BaseModel):

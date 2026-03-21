@@ -143,6 +143,48 @@ class FeatureCache:
                 )
                 tf_feature_dfs.setdefault(timeframe, []).append(fuzzy_df)
 
+            # Extract raw indicator columns
+            for raw_feature in reqs.get("raw_features", []):
+                # Build the indicator column name in indicator_df
+                if raw_feature.indicator_output:
+                    indicator_col = f"{timeframe}_{raw_feature.indicator_id}.{raw_feature.indicator_output}"
+                else:
+                    indicator_col = f"{timeframe}_{raw_feature.indicator_id}"
+
+                if indicator_col not in indicator_df.columns:
+                    raise ValueError(
+                        f"Raw indicator column '{indicator_col}' not found. "
+                        f"Available: {list(indicator_df.columns)}"
+                    )
+
+                # Create a single-column DataFrame with the feature_id as column name
+                raw_df = indicator_df[[indicator_col]].rename(
+                    columns={indicator_col: raw_feature.feature_id}
+                )
+
+                # Apply normalization using stored training params
+                norm_params = getattr(self.metadata, "normalization_params", {})
+                if raw_feature.feature_id in norm_params:
+                    p = norm_params[raw_feature.feature_id]
+                    method = p.get("method", "none")
+                    col = raw_df[raw_feature.feature_id]
+
+                    if method == "minmax":
+                        denom = p["max"] - p["min"]
+                        if denom != 0:
+                            raw_df[raw_feature.feature_id] = (col - p["min"]) / denom
+                        else:
+                            raw_df[raw_feature.feature_id] = 0.0
+                    elif method == "zscore":
+                        if p["std"] != 0:
+                            raw_df[raw_feature.feature_id] = (col - p["mean"]) / p[
+                                "std"
+                            ]
+                        else:
+                            raw_df[raw_feature.feature_id] = 0.0
+
+                tf_feature_dfs.setdefault(timeframe, []).append(raw_df)
+
         if not tf_feature_dfs:
             raise ValueError("No features computed - check data and configuration")
 
@@ -232,14 +274,21 @@ class FeatureCache:
             resolved: List of resolved features from FeatureResolver
 
         Returns:
-            Dict mapping timeframe to {indicators: set, fuzzy_sets: set}
+            Dict mapping timeframe to {indicators: set, fuzzy_sets: set, raw_features: list}
         """
         result: dict[str, dict[str, Any]] = {}
         for f in resolved:
             if f.timeframe not in result:
-                result[f.timeframe] = {"indicators": set(), "fuzzy_sets": set()}
+                result[f.timeframe] = {
+                    "indicators": set(),
+                    "fuzzy_sets": set(),
+                    "raw_features": [],
+                }
             result[f.timeframe]["indicators"].add(f.indicator_id)
-            result[f.timeframe]["fuzzy_sets"].add(f.fuzzy_set_id)
+            if f.fuzzy_set_id == "__raw__":
+                result[f.timeframe]["raw_features"].append(f)
+            else:
+                result[f.timeframe]["fuzzy_sets"].add(f.fuzzy_set_id)
         return result
 
     def _get_base_timeframe_key(self, data: dict[str, pd.DataFrame]) -> str:
