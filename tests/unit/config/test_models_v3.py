@@ -189,16 +189,15 @@ class TestNNInputSpec:
     def test_rejects_both_fuzzy_and_raw(self):
         """NNInputSpec must not have both fuzzy_set and raw_indicator."""
         with pytest.raises(ValidationError) as exc_info:
-            NNInputSpec(
-                fuzzy_set="rsi_fast", raw_indicator="rsi_14", timeframes="all"
-            )
-        assert "either" in str(exc_info.value).lower() or "not both" in str(
-            exc_info.value
-        ).lower()
+            NNInputSpec(fuzzy_set="rsi_fast", raw_indicator="rsi_14", timeframes="all")
+        assert (
+            "either" in str(exc_info.value).lower()
+            or "not both" in str(exc_info.value).lower()
+        )
 
     def test_rejects_neither_fuzzy_nor_raw(self):
         """NNInputSpec must have at least one of fuzzy_set or raw_indicator."""
-        with pytest.raises(ValidationError) as exc_info:
+        with pytest.raises(ValidationError):
             NNInputSpec(timeframes="all")
         # Should fail validation requiring one of fuzzy_set or raw_indicator
 

@@ -1,7 +1,6 @@
 """Tests for Gaussian MF strategy templates and dead zone elimination."""
 
 import numpy as np
-import pytest
 
 from ktrdr.config.models import (
     FuzzySetDefinition,
@@ -167,9 +166,7 @@ class TestGaussianDeadZones:
             total = low.evaluate(rsi) + neutral.evaluate(rsi) + high.evaluate(rsi)
             # Gaussian sets won't sum to exactly 1.0 but should be close
             # Allow wider tolerance — the point is no dead zones, not exact Ruspini
-            assert (
-                0.5 < total < 2.0
-            ), f"Ruspini violation at RSI={rsi}: sum={total}"
+            assert 0.5 < total < 2.0, f"Ruspini violation at RSI={rsi}: sum={total}"
 
 
 class TestFeatureResolverWithGaussianStrategy:
