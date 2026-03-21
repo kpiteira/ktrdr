@@ -1,0 +1,119 @@
+# =============================================================================
+# RANGE TRIPLE BARRIER SIGNAL MODEL
+# =============================================================================
+# Classification model for ranging regimes using triple barrier labels.
+# Same indicators/fuzzy sets as range_regression_signal_v1 for
+# apples-to-apples comparison in Experiment 1 (TB vs forward-return).
+#
+# Changes from range_regression_signal_v1:
+# - Labels: triple_barrier (3-class: BUY/HOLD/SELL) instead of forward_return
+# - Output: classification instead of regression
+# - Training: focal loss, higher epochs with early stopping, gradient clipping
+# - Optional CUSUM filtering and uniqueness weighting
+# =============================================================================
+
+name: range_tb_signal_v1
+version: "3.0"
+description: >
+  Triple barrier signal model for ranging regimes. Uses same indicators as
+  range_regression_signal_v1 (Stochastic, Williams %R, RSI, BBWidth) but with
+  volatility-adaptive triple barrier labels. Classifies each bar as BUY
+  (take-profit hit), HOLD (time expiry), or SELL (stop-loss hit).
+
+training_data:
+  symbols:
+    mode: single
+    symbol: EURUSD
+  timeframes:
+    mode: single
+    timeframe: 1h
+  history_required: 200
+  start_date: "2020-01-01"
+  end_date: "2024-01-01"
+
+indicators:
+  stoch_14_3:
+    type: stochastic
+    k_period: 14
+    d_period: 3
+    smooth_k: 3
+  williams_14:
+    type: williamsr
+    period: 14
+  rsi_21:
+    type: rsi
+    period: 21
+  bbwidth_20:
+    type: bollingerbandwidth
+    period: 20
+
+fuzzy_sets:
+  # Same fuzzy sets as range_regression_signal_v1 — identical encoding
+  # for apples-to-apples comparison with forward-return baseline
+  stoch_zone:
+    indicator: stoch_14_3.k
+    oversold: [0, 15, 30]
+    overbought: [70, 85, 100]
+
+  williams_zone:
+    indicator: williams_14
+    oversold: [-100, -85, -70]
+    overbought: [-30, -15, 0]
+
+  rsi_zone:
+    indicator: rsi_21
+    oversold: [20, 30, 40]
+    overbought: [60, 70, 80]
+
+  bbwidth_level:
+    indicator: bbwidth_20
+    tight: [0, 0.01, 0.02]
+    wide: [0.03, 0.06, 0.10]
+
+nn_inputs:
+  - fuzzy_set: stoch_zone
+    timeframes: all
+  - fuzzy_set: williams_zone
+    timeframes: all
+  - fuzzy_set: rsi_zone
+    timeframes: all
+  - fuzzy_set: bbwidth_level
+    timeframes: all
+
+model:
+  type: mlp
+  architecture:
+    hidden_layers: [64, 32]
+    dropout: 0.3
+    activation: relu
+
+decisions:
+  output_format: classification
+  num_classes: 3
+  confidence_threshold: 0.5
+  cost_model:
+    round_trip_cost: 0.0002
+    min_edge_multiplier: 2.0
+  position_awareness: true
+  filters:
+    min_signal_separation: 4
+
+training:
+  labels:
+    source: triple_barrier
+    pt_multiplier: 2.0
+    sl_multiplier: 1.5
+    max_holding_period: 50
+    vol_span: 50
+    vol_method: atr
+    compute_weights: true
+  loss: focal
+  focal_gamma: 2.0
+  epochs: 200
+  learning_rate: 0.001
+  batch_size: 256
+  early_stopping:
+    patience: 15
+    min_delta: 0.001
+  lr_scheduler: true
+  gradient_clip: 1.0

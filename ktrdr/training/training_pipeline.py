@@ -777,6 +777,7 @@ class TrainingPipeline:
         cancellation_token: Optional[CancellationToken] = None,
         checkpoint_callback=None,
         resume_context: "Optional[TrainingResumeContext]" = None,
+        sample_weights: Optional[torch.Tensor] = None,
     ) -> dict[str, Any]:
         """
         Train the neural network model (symbol-agnostic).
@@ -841,6 +842,7 @@ class TrainingPipeline:
             y_train=y_train,
             X_val=X_val,
             y_val=y_val,
+            sample_weights=sample_weights,
         )
 
         # Use the actual keys returned by ModelTrainer
@@ -1197,6 +1199,30 @@ class TrainingPipelineV3:
 
                     symbol_dfs.append(fuzzy_df)
 
+                # Extract raw indicator features (hybrid encoding)
+                for raw_feature in reqs.get("raw_features", []):
+                    # Build the indicator column name
+                    if raw_feature.indicator_output:
+                        indicator_col = (
+                            f"{timeframe}_{raw_feature.indicator_id}"
+                            f".{raw_feature.indicator_output}"
+                        )
+                    else:
+                        indicator_col = f"{timeframe}_{raw_feature.indicator_id}"
+
+                    if indicator_col not in indicator_df.columns:
+                        raise ValueError(
+                            f"Raw indicator column '{indicator_col}' not found. "
+                            f"Available: {list(indicator_df.columns)}"
+                        )
+
+                    # Extract raw values as a single-column DataFrame
+                    raw_col = indicator_df[[indicator_col]].copy()
+                    raw_col = raw_col.rename(
+                        columns={indicator_col: raw_feature.feature_id}
+                    )
+                    symbol_dfs.append(raw_col)
+
             if symbol_dfs:
                 # Combine all fuzzy DataFrames for this symbol
                 symbol_features = pd.concat(symbol_dfs, axis=1)
@@ -1241,9 +1267,16 @@ class TrainingPipelineV3:
         result: dict[str, dict] = {}
         for f in resolved:
             if f.timeframe not in result:
-                result[f.timeframe] = {"indicators": set(), "fuzzy_sets": set()}
+                result[f.timeframe] = {
+                    "indicators": set(),
+                    "fuzzy_sets": set(),
+                    "raw_features": [],
+                }
             result[f.timeframe]["indicators"].add(f.indicator_id)
-            result[f.timeframe]["fuzzy_sets"].add(f.fuzzy_set_id)
+            if f.fuzzy_set_id == "__raw__":
+                result[f.timeframe]["raw_features"].append(f)
+            else:
+                result[f.timeframe]["fuzzy_sets"].add(f.fuzzy_set_id)
 
         # Log requirements summary
         reqs_summary = ", ".join(

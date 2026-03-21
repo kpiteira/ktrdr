@@ -1,0 +1,133 @@
+# =============================================================================
+# TREND TRIPLE BARRIER SIGNAL MODEL
+# =============================================================================
+# Classification model for trending regimes using triple barrier labels.
+# Same indicators/fuzzy sets as trend_regression_signal_v1 for
+# apples-to-apples comparison in Experiment 1 (TB vs forward-return).
+#
+# Changes from trend_regression_signal_v1:
+# - Labels: triple_barrier (3-class: BUY/HOLD/SELL) instead of forward_return
+# - Output: classification instead of regression
+# - Training: focal loss, higher epochs with early stopping, gradient clipping
+# - Optional CUSUM filtering and uniqueness weighting
+# =============================================================================
+
+name: trend_tb_signal_v1
+version: "3.0"
+description: >
+  Triple barrier signal model for trending regimes. Uses same indicators as
+  trend_regression_signal_v1 (RSI, ADX, MACD, ROC) but with volatility-adaptive
+  triple barrier labels instead of fixed-horizon forward returns. Classifies
+  each bar as BUY (take-profit hit), HOLD (time expiry), or SELL (stop-loss hit).
+
+training_data:
+  symbols:
+    mode: single
+    symbol: EURUSD
+  timeframes:
+    mode: single
+    timeframe: 1h
+  history_required: 200
+  start_date: "2020-01-01"
+  end_date: "2024-01-01"
+
+indicators:
+  rsi_14:
+    type: rsi
+    period: 14
+  adx_14:
+    type: adx
+    period: 14
+  macd_12_26_9:
+    type: macd
+    fast: 12
+    slow: 26
+    signal: 9
+  roc_10:
+    type: roc
+    period: 10
+
+fuzzy_sets:
+  # Same fuzzy sets as trend_regression_signal_v1 — identical encoding
+  # for apples-to-apples comparison with forward-return baseline
+  rsi_zone:
+    indicator: rsi_14
+    oversold: [20, 30, 40]
+    overbought: [60, 70, 80]
+
+  adx_strength:
+    indicator: adx_14.adx
+    weak: [0, 10, 20]
+    strong: [20, 35, 55]
+
+  adx_direction:
+    indicator: adx_14.plus_di
+    bearish: [0, 10, 20]
+    bullish: [20, 30, 50]
+
+  macd_signal:
+    indicator: macd_12_26_9.line
+    bearish: [-0.001, -0.0003, 0]
+    bullish: [0, 0.0003, 0.001]
+
+  macd_momentum:
+    indicator: macd_12_26_9.histogram
+    falling: [-0.0005, -0.0002, 0]
+    rising: [0, 0.0002, 0.0005]
+
+  roc_direction:
+    indicator: roc_10
+    falling: [-0.5, -0.15, 0]
+    rising: [0, 0.15, 0.5]
+
+nn_inputs:
+  - fuzzy_set: rsi_zone
+    timeframes: all
+  - fuzzy_set: adx_strength
+    timeframes: all
+  - fuzzy_set: adx_direction
+    timeframes: all
+  - fuzzy_set: macd_signal
+    timeframes: all
+  - fuzzy_set: macd_momentum
+    timeframes: all
+  - fuzzy_set: roc_direction
+    timeframes: all
+
+model:
+  type: mlp
+  architecture:
+    hidden_layers: [64, 32]
+    dropout: 0.3
+    activation: relu
+
+decisions:
+  output_format: classification
+  num_classes: 3
+  confidence_threshold: 0.5
+  cost_model:
+    round_trip_cost: 0.0002
+    min_edge_multiplier: 2.0
+  position_awareness: true
+  filters:
+    min_signal_separation: 4
+
+training:
+  labels:
+    source: triple_barrier
+    pt_multiplier: 2.0
+    sl_multiplier: 1.5
+    max_holding_period: 50
+    vol_span: 50
+    vol_method: atr
+    compute_weights: true
+  loss: focal
+  focal_gamma: 2.0
+  epochs: 200
+  learning_rate: 0.001
+  batch_size: 256
+  early_stopping:
+    patience: 15
+    min_delta: 0.001
+  lr_scheduler: true
+  gradient_clip: 1.0
