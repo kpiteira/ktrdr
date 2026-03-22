@@ -329,7 +329,7 @@ class ModelTrainer:
             # equal attention to all classes regardless of how many examples
             # each class has.  Without this, the model can "cheat" by always
             # predicting the most common class.
-            class_weights = self._compute_class_weights(y_train)
+            class_weights = self._compute_class_weights(y_train).to(self.device)
 
             loss_type = self.config.get("loss", "cross_entropy")
             if loss_type == "focal":
@@ -1091,11 +1091,20 @@ class ModelTrainer:
         A dataset with 57% class-A and 43% class-B will produce weights
         that make each class-B example count ~1.3x more than each class-A
         example, preventing the model from ignoring the minority class.
+
+        Handles edge cases: zero-count classes get zero weight (they have
+        no examples to learn from), and minlength ensures the weight vector
+        covers all class indices present in the labels.
         """
-        counts = torch.bincount(y.long())
-        # Inverse frequency, normalised so weights sum to num_classes
-        weights = 1.0 / counts.float()
-        weights = weights / weights.sum() * len(counts)
+        num_classes = int(y.max().item()) + 1
+        counts = torch.bincount(y.long(), minlength=num_classes)
+        weights = torch.zeros(num_classes, dtype=torch.float32)
+        nonzero = counts > 0
+        if nonzero.any():
+            weights[nonzero] = 1.0 / counts[nonzero].float()
+            weights = weights / weights.sum() * num_classes
+        else:
+            weights = torch.ones(num_classes, dtype=torch.float32)
         return weights
 
     def _create_optimizer(

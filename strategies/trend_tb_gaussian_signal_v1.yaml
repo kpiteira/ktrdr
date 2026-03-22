@@ -149,5 +149,3 @@ training:
   early_stopping:
     patience: 15
     min_delta: 0.001
-  lr_scheduler: true
-  gradient_clip: 1.0
