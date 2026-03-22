@@ -73,3 +73,17 @@
 - But backtest win rate ~10% — massive gap between val accuracy and live performance
 - Context gate mechanism works correctly (verified by E2E test)
 - **NO-GO for Phases 3-4** — signal models don't produce actionable predictions despite passing training metrics
+
+## Post-M5 Investigation: Model Collapse Root Cause
+
+**Problem:** 55% val accuracy but 10% backtest win rate. Investigation revealed:
+
+1. **Trend model predicted SELL on 72% of bars** — majority class collapse (SL=57.4% of training labels)
+2. **Range model predicted SELL on 100% of bars** — complete collapse despite focal loss
+3. **Trend strategy was missing `loss: focal`** — M4 template omitted M3's training improvements
+
+**Mechanism fix applied:**
+- Added inverse-frequency class weights to both `CrossEntropyLoss` and `FocalLoss` in `model_trainer.py`
+- Added `loss: focal`, `gradient_clip: 1.0`, `lr_scheduler: true` to `trend_tb_gaussian_signal_v1.yaml`
+
+**Result after fix:** Both models now output near-uniform probabilities (~33/33/34%) — class weights prevent majority-class cheating, but the model genuinely can't distinguish TP from SL bars. This is the honest answer: these features don't carry predictive signal for this task. The mechanism is now correct; finding discriminative features is a strategy research problem.
