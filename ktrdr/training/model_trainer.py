@@ -268,6 +268,7 @@ class ModelTrainer:
         model_type = self.config.get("type", "mlp").lower()
         architecture_cfg = self.config.get("architecture") or {}
         seq_len = architecture_cfg.get("sequence_length")
+        train_dataset: Any  # TensorDataset or SequenceDataset
         if model_type in ("lstm", "gru") and isinstance(seq_len, int) and seq_len > 0:
             from .sequence_dataset import SequenceDataset
 

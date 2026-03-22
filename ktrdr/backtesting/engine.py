@@ -247,6 +247,7 @@ class BacktestingEngine:
                 pending_metadata = None
 
             # Feature lookup — temporal models get a window, MLP gets a single row
+            features: Any
             if self._is_temporal:
                 features = self.feature_cache.get_feature_window(
                     timestamp, self._sequence_length
