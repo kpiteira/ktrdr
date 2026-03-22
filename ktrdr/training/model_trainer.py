@@ -24,7 +24,6 @@ from .multi_symbol_data_loader import MultiSymbolDataLoader
 
 if TYPE_CHECKING:
     from .checkpoint_restore import TrainingResumeContext
-    from .sequence_dataset import SequenceDataset
 
 
 @dataclass
@@ -269,7 +268,6 @@ class ModelTrainer:
         model_type = self.config.get("type", "mlp").lower()
         architecture_cfg = self.config.get("architecture") or {}
         seq_len = architecture_cfg.get("sequence_length")
-        train_dataset: TensorDataset | SequenceDataset
         if model_type in ("lstm", "gru") and isinstance(seq_len, int) and seq_len > 0:
             from .sequence_dataset import SequenceDataset
 

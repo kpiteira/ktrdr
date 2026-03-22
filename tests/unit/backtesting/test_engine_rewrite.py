@@ -266,6 +266,8 @@ class TestSimulationLoop:
             from ktrdr.backtesting.engine import BacktestingEngine
 
             engine = BacktestingEngine.__new__(BacktestingEngine)
+            engine._is_temporal = False
+            engine._sequence_length = 1
 
             config = _make_config()
             engine.config = config
@@ -273,6 +275,10 @@ class TestSimulationLoop:
 
             # Mock bundle
             engine.bundle = _make_mock_bundle()
+
+            # Temporal model detection (default to MLP for existing tests)
+            engine._is_temporal = False
+            engine._sequence_length = 1
 
             # Mock feature cache
             engine.feature_cache = MagicMock()
@@ -446,6 +452,8 @@ class TestSimulationLoopTradeExecution:
             from ktrdr.decision.base import Position, Signal, TradingDecision
 
             engine = BacktestingEngine.__new__(BacktestingEngine)
+            engine._is_temporal = False
+            engine._sequence_length = 1
 
             config = _make_config()
             engine.config = config
