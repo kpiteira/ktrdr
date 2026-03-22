@@ -830,6 +830,11 @@ class LocalTrainingOrchestrator:
         }
         output_type = output_type_map.get(label_source, "classification")
 
+        # Extract model type and sequence length for temporal models
+        model_section = config.get("model", {})
+        model_type = model_section.get("type", "mlp")
+        sequence_length = model_section.get("architecture", {}).get("sequence_length")
+
         # Create metadata
         metadata = ModelMetadataV3(
             model_name=config.get("name", "unknown"),
@@ -843,6 +848,8 @@ class LocalTrainingOrchestrator:
             training_timeframes=training_timeframes,
             training_metrics=training_metrics,
             output_type=output_type,
+            model_type=model_type,
+            sequence_length=sequence_length,
             context_data_config=context_data_config,
             context_source_ids=context_source_ids,
         )
