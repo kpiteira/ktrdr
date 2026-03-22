@@ -264,8 +264,15 @@ class ModelTrainer:
             X_train_cpu = X_train
             y_train_cpu = y_train
 
-        # Create optimized data loader with pinned memory for GPU transfer
-        train_dataset = TensorDataset(X_train_cpu, y_train_cpu)
+        # Create dataset — SequenceDataset for temporal models, TensorDataset for MLP
+        model_type = self.config.get("type", "mlp").lower()
+        if model_type in ("lstm", "gru"):
+            from .sequence_dataset import SequenceDataset
+
+            seq_len = self.config["architecture"]["sequence_length"]
+            train_dataset = SequenceDataset(X_train_cpu, y_train_cpu, seq_len)
+        else:
+            train_dataset = TensorDataset(X_train_cpu, y_train_cpu)
 
         # Use WeightedRandomSampler when sample weights provided (e.g., TB uniqueness weights)
         # This samples higher-weighted samples more frequently, replacing uniform shuffle.
@@ -295,6 +302,18 @@ class ModelTrainer:
                 pin_memory=use_pin_memory,
                 num_workers=0,
             )
+
+        # For temporal models, convert validation data to sequences
+        if model_type in ("lstm", "gru") and X_val is not None and y_val is not None:
+            from .sequence_dataset import SequenceDataset
+
+            seq_len = self.config["architecture"]["sequence_length"]
+            val_seq_ds = SequenceDataset(X_val, y_val, seq_len)
+            # Stack all sequences into a single batch for validation
+            val_seqs = torch.stack([val_seq_ds[i][0] for i in range(len(val_seq_ds))])
+            val_labels = torch.stack([val_seq_ds[i][1] for i in range(len(val_seq_ds))])
+            X_val = val_seqs
+            y_val = val_labels
 
         # Move validation data to GPU (smaller, benefits from staying on GPU)
         if X_val is not None:

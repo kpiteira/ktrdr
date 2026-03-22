@@ -762,6 +762,32 @@ class TrainingPipeline:
                 f"✅ Created MLP model with hidden_layers={model_config.get('hidden_layers', [])}"
             )
             return model
+        elif model_type == "lstm":
+            from ktrdr.neural.models.lstm import LSTMTradingModel
+
+            model_config_with_classes = {**model_config, "num_classes": output_dim}
+            lstm_model = LSTMTradingModel(model_config_with_classes)
+            model = lstm_model.build_model(input_dim)
+            arch = model_config.get("architecture", {})
+            logger.info(
+                f"✅ Created LSTM model with hidden_size={arch.get('hidden_size')}, "
+                f"num_layers={arch.get('num_layers')}, "
+                f"sequence_length={arch.get('sequence_length')}"
+            )
+            return model
+        elif model_type == "gru":
+            from ktrdr.neural.models.gru import GRUTradingModel
+
+            model_config_with_classes = {**model_config, "num_classes": output_dim}
+            gru_model = GRUTradingModel(model_config_with_classes)
+            model = gru_model.build_model(input_dim)
+            arch = model_config.get("architecture", {})
+            logger.info(
+                f"✅ Created GRU model with hidden_size={arch.get('hidden_size')}, "
+                f"num_layers={arch.get('num_layers')}, "
+                f"sequence_length={arch.get('sequence_length')}"
+            )
+            return model
         else:
             raise ValueError(f"Unknown model type: {model_type}")
 
