@@ -1,9 +1,9 @@
 """Tests for LSTM trading model."""
 
 import pytest
-import torch
 
-from ktrdr.neural.models.lstm import LSTMNetwork, LSTMTradingModel
+torch = pytest.importorskip("torch")
+from ktrdr.neural.models.lstm import LSTMNetwork, LSTMTradingModel  # noqa: E402
 
 
 class TestLSTMNetwork:

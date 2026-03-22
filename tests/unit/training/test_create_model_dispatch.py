@@ -1,10 +1,11 @@
 """Tests for create_model() dispatch to LSTM/GRU."""
 
 import pytest
-import torch
-import torch.nn as nn
 
-from ktrdr.training.training_pipeline import TrainingPipeline
+torch = pytest.importorskip("torch")
+import torch.nn as nn  # noqa: E402
+
+from ktrdr.training.training_pipeline import TrainingPipeline  # noqa: E402
 
 
 class TestCreateModelDispatch:

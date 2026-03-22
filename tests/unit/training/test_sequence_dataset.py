@@ -1,10 +1,11 @@
 """Tests for SequenceDataset sliding window."""
 
 import pytest
-import torch
-from torch.utils.data import DataLoader
 
-from ktrdr.training.sequence_dataset import SequenceDataset
+torch = pytest.importorskip("torch")
+from torch.utils.data import DataLoader  # noqa: E402
+
+from ktrdr.training.sequence_dataset import SequenceDataset  # noqa: E402
 
 
 class TestSequenceDataset:
@@ -85,3 +86,31 @@ class TestSequenceDataset:
         x, y = ds[5]
         assert x.shape == (1, 4)
         assert torch.equal(x[0], features[5])
+
+    def test_sequence_length_zero_raises(self):
+        """sequence_length=0 raises ValueError."""
+        features = torch.randn(10, 4)
+        labels = torch.randint(0, 3, (10,))
+        with pytest.raises(ValueError, match="sequence_length must be >= 1"):
+            SequenceDataset(features, labels, sequence_length=0)
+
+    def test_mismatched_lengths_raises(self):
+        """Mismatched features/labels lengths raises ValueError."""
+        features = torch.randn(10, 4)
+        labels = torch.randint(0, 3, (8,))
+        with pytest.raises(ValueError, match="same length"):
+            SequenceDataset(features, labels, sequence_length=3)
+
+    def test_3d_features_raises(self):
+        """3D features tensor raises ValueError."""
+        features = torch.randn(10, 4, 2)
+        labels = torch.randint(0, 3, (10,))
+        with pytest.raises(ValueError, match="2D"):
+            SequenceDataset(features, labels, sequence_length=3)
+
+    def test_2d_labels_raises(self):
+        """2D labels tensor raises ValueError."""
+        features = torch.randn(10, 4)
+        labels = torch.randint(0, 3, (10, 1))
+        with pytest.raises(ValueError, match="1D"):
+            SequenceDataset(features, labels, sequence_length=3)

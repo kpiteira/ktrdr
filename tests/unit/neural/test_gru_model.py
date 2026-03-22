@@ -1,9 +1,9 @@
 """Tests for GRU trading model."""
 
 import pytest
-import torch
 
-from ktrdr.neural.models.gru import GRUNetwork, GRUTradingModel
+torch = pytest.importorskip("torch")
+from ktrdr.neural.models.gru import GRUNetwork, GRUTradingModel  # noqa: E402
 
 
 class TestGRUNetwork:

@@ -728,16 +728,15 @@ class TrainingPipeline:
         """
         Create neural network model.
 
-        EXTRACTED FROM: StrategyTrainer._create_model() (train_strategy.py:921-940)
-
         Args:
             input_dim: Number of input features
             output_dim: Number of output classes
             model_config: Model configuration dict containing:
-                - type: Model type (default: "mlp")
-                - hidden_layers: List of hidden layer sizes
-                - dropout: Dropout rate
-                - num_classes: Number of output classes
+                - type: "mlp" (default), "lstm", or "gru"
+                - architecture: Architecture-specific config:
+                    MLP: {hidden_layers: [64, 32], dropout: 0.2, activation: "relu"}
+                    LSTM/GRU: {hidden_size: 64, num_layers: 2, dropout: 0.2, sequence_length: 20}
+                - num_classes: Injected from output_dim (not user-specified)
 
         Returns:
             Neural network module ready for training

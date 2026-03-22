@@ -454,6 +454,10 @@ class LocalTrainingOrchestrator:
             "learning_rate": training_section.get("learning_rate", 0.001),
             "batch_size": training_section.get("batch_size", 32),
             "output_format": output_format,
+            # Pass model type and architecture so ModelTrainer can select
+            # the correct dataset type (SequenceDataset for LSTM/GRU)
+            "type": model_config.get("type", "mlp"),
+            "architecture": model_config.get("architecture", {}),
         }
 
         # Pass loss config for all output formats (focal loss for classification,
