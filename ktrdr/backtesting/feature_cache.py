@@ -263,6 +263,37 @@ class FeatureCache:
         row = self._cached_features.loc[timestamp]
         return {str(k): float(v) for k, v in row.to_dict().items()}
 
+    def get_feature_window(
+        self,
+        timestamp: pd.Timestamp,
+        sequence_length: int,
+    ) -> pd.DataFrame | None:
+        """Get last sequence_length rows of features ending at timestamp.
+
+        Used by temporal models (LSTM/GRU) that need a sequence of features
+        instead of a single point-in-time vector.
+
+        Args:
+            timestamp: Target timestamp (end of window)
+            sequence_length: Number of timesteps in the window
+
+        Returns:
+            DataFrame of shape (sequence_length, num_features) with columns
+            in expected feature order, or None if insufficient history
+        """
+        if self._cached_features is None:
+            return None
+
+        if timestamp not in self._cached_features.index:
+            return None
+
+        idx = self._cached_features.index.get_loc(timestamp)
+        if idx < sequence_length - 1:
+            return None  # Insufficient history
+
+        start = idx - sequence_length + 1
+        return self._cached_features.iloc[start : idx + 1]
+
     def is_ready(self) -> bool:
         """Check if feature cache has pre-computed features.
 

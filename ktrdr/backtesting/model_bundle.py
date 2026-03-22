@@ -185,14 +185,25 @@ def _build_model(model_config: dict[str, Any], input_size: int) -> torch.nn.Modu
     Returns:
         Built nn.Module (not yet loaded with weights)
     """
-    from ktrdr.neural.models.mlp import MLPTradingModel
-
     model_type = model_config.get("type", "mlp").lower()
-    if model_type != "mlp":
-        raise ValueError(f"Unsupported model type: {model_type}")
 
-    mlp = MLPTradingModel(model_config)
-    return mlp.build_model(input_size)
+    if model_type == "mlp":
+        from ktrdr.neural.models.mlp import MLPTradingModel
+
+        mlp = MLPTradingModel(model_config)
+        return mlp.build_model(input_size)
+    elif model_type == "lstm":
+        from ktrdr.neural.models.lstm import LSTMTradingModel
+
+        lstm = LSTMTradingModel(model_config)
+        return lstm.build_model(input_size)
+    elif model_type == "gru":
+        from ktrdr.neural.models.gru import GRUTradingModel
+
+        gru = GRUTradingModel(model_config)
+        return gru.build_model(input_size)
+    else:
+        raise ValueError(f"Unsupported model type: {model_type}")
 
 
 @dataclass(frozen=True)
