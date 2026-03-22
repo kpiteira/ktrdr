@@ -112,6 +112,10 @@ class BacktestingEngine:
         self.bundle = ModelBundle.load(config.model_path)
         self.strategy_name = self.bundle.metadata.strategy_name
 
+        # Temporal model detection (LSTM/GRU need sequence windows)
+        self._is_temporal = self.bundle.metadata.model_type in ("lstm", "gru")
+        self._sequence_length = self.bundle.metadata.sequence_length or 1
+
         # Feature computation
         self.feature_cache = FeatureCache(
             config=self.bundle.strategy_config,
@@ -242,8 +246,14 @@ class BacktestingEngine:
                 pending_signal = None
                 pending_metadata = None
 
-            # Feature lookup
-            features = self.feature_cache.get_features_for_timestamp(timestamp)
+            # Feature lookup — temporal models get a window, MLP gets a single row
+            features: Any
+            if self._is_temporal:
+                features = self.feature_cache.get_feature_window(
+                    timestamp, self._sequence_length
+                )
+            else:
+                features = self.feature_cache.get_features_for_timestamp(timestamp)
             if features is not None:
                 # Decision (stateless — position passed in, not tracked internally)
                 decision = self.decide(

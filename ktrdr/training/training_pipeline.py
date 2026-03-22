@@ -728,16 +728,15 @@ class TrainingPipeline:
         """
         Create neural network model.
 
-        EXTRACTED FROM: StrategyTrainer._create_model() (train_strategy.py:921-940)
-
         Args:
             input_dim: Number of input features
             output_dim: Number of output classes
             model_config: Model configuration dict containing:
-                - type: Model type (default: "mlp")
-                - hidden_layers: List of hidden layer sizes
-                - dropout: Dropout rate
-                - num_classes: Number of output classes
+                - type: "mlp" (default), "lstm", or "gru"
+                - architecture: Architecture-specific config:
+                    MLP: {hidden_layers: [64, 32], dropout: 0.2, activation: "relu"}
+                    LSTM/GRU: {hidden_size: 64, num_layers: 2, dropout: 0.2, sequence_length: 20}
+                - num_classes: Injected from output_dim (not user-specified)
 
         Returns:
             Neural network module ready for training
@@ -760,6 +759,32 @@ class TrainingPipeline:
             model = mlp_model.build_model(input_dim)
             logger.info(
                 f"✅ Created MLP model with hidden_layers={model_config.get('hidden_layers', [])}"
+            )
+            return model
+        elif model_type == "lstm":
+            from ktrdr.neural.models.lstm import LSTMTradingModel
+
+            model_config_with_classes = {**model_config, "num_classes": output_dim}
+            lstm_model = LSTMTradingModel(model_config_with_classes)
+            model = lstm_model.build_model(input_dim)
+            arch = model_config.get("architecture", {})
+            logger.info(
+                f"✅ Created LSTM model with hidden_size={arch.get('hidden_size')}, "
+                f"num_layers={arch.get('num_layers')}, "
+                f"sequence_length={arch.get('sequence_length')}"
+            )
+            return model
+        elif model_type == "gru":
+            from ktrdr.neural.models.gru import GRUTradingModel
+
+            model_config_with_classes = {**model_config, "num_classes": output_dim}
+            gru_model = GRUTradingModel(model_config_with_classes)
+            model = gru_model.build_model(input_dim)
+            arch = model_config.get("architecture", {})
+            logger.info(
+                f"✅ Created GRU model with hidden_size={arch.get('hidden_size')}, "
+                f"num_layers={arch.get('num_layers')}, "
+                f"sequence_length={arch.get('sequence_length')}"
             )
             return model
         else:
@@ -873,6 +898,7 @@ class TrainingPipeline:
         y_test: Optional[torch.Tensor],
         symbol_indices_test: Optional[torch.Tensor] = None,
         output_format: str = "classification",
+        model_config: Optional[dict[str, Any]] = None,
     ) -> dict[str, Any]:
         """
         Evaluate model on test set.
@@ -905,6 +931,19 @@ class TrainingPipeline:
 
         # Move test data to the same device as the model
         device = next(model.parameters()).device
+
+        # For temporal models, convert test data to sequences
+        _model_config = model_config or {}
+        model_type = _model_config.get("type", "mlp").lower()
+        seq_len = _model_config.get("architecture", {}).get("sequence_length")
+        if model_type in ("lstm", "gru") and isinstance(seq_len, int) and seq_len > 0:
+            if X_test.size(0) >= seq_len:
+                X_test_seq = X_test.unfold(dimension=0, size=seq_len, step=1)
+                X_test_seq = X_test_seq.transpose(1, 2)  # (N, seq_len, F)
+                num_windows = X_test_seq.size(0)
+                y_test = y_test[seq_len - 1 : seq_len - 1 + num_windows]
+                X_test = X_test_seq
+
         X_test = X_test.to(device)
         y_test = y_test.to(device)
 

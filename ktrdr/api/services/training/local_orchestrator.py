@@ -454,6 +454,10 @@ class LocalTrainingOrchestrator:
             "learning_rate": training_section.get("learning_rate", 0.001),
             "batch_size": training_section.get("batch_size", 32),
             "output_format": output_format,
+            # Pass model type and architecture so ModelTrainer can select
+            # the correct dataset type (SequenceDataset for LSTM/GRU)
+            "type": model_config.get("type", "mlp"),
+            "architecture": model_config.get("architecture", {}),
         }
 
         # Pass loss config for all output formats (focal loss for classification,
@@ -486,7 +490,11 @@ class LocalTrainingOrchestrator:
 
         # Evaluate model
         test_metrics = TrainingPipeline.evaluate_model(
-            model, X_test, y_test, output_format=output_format
+            model,
+            X_test,
+            y_test,
+            output_format=output_format,
+            model_config=model_config,
         )
 
         # Save model
@@ -825,6 +833,11 @@ class LocalTrainingOrchestrator:
         }
         output_type = output_type_map.get(label_source, "classification")
 
+        # Extract model type and sequence length for temporal models
+        model_section = config.get("model", {})
+        model_type = model_section.get("type", "mlp")
+        sequence_length = model_section.get("architecture", {}).get("sequence_length")
+
         # Create metadata
         metadata = ModelMetadataV3(
             model_name=config.get("name", "unknown"),
@@ -838,6 +851,8 @@ class LocalTrainingOrchestrator:
             training_timeframes=training_timeframes,
             training_metrics=training_metrics,
             output_type=output_type,
+            model_type=model_type,
+            sequence_length=sequence_length,
             context_data_config=context_data_config,
             context_source_ids=context_source_ids,
         )

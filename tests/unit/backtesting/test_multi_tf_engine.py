@@ -75,6 +75,8 @@ class TestEngineUsesConfigTimeframes:
 
         with patch.object(BacktestingEngine, "__init__", lambda self, cfg: None):
             engine = BacktestingEngine.__new__(BacktestingEngine)
+            engine._is_temporal = False
+            engine._sequence_length = 1
             engine.config = config
             engine.bundle = mock_bundle
             engine.repository = MagicMock()
@@ -107,6 +109,8 @@ class TestEngineUsesConfigTimeframes:
 
         with patch.object(BacktestingEngine, "__init__", lambda self, cfg: None):
             engine = BacktestingEngine.__new__(BacktestingEngine)
+            engine._is_temporal = False
+            engine._sequence_length = 1
             engine.config = config
             engine.bundle = mock_bundle
             engine.repository = MagicMock()
@@ -143,6 +147,8 @@ class TestEngineUsesConfigTimeframes:
 
         with patch.object(BacktestingEngine, "__init__", lambda self, cfg: None):
             engine = BacktestingEngine.__new__(BacktestingEngine)
+            engine._is_temporal = False
+            engine._sequence_length = 1
             engine.config = config
             engine.bundle = mock_bundle
             engine.repository = MagicMock()

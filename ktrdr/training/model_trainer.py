@@ -264,8 +264,17 @@ class ModelTrainer:
             X_train_cpu = X_train
             y_train_cpu = y_train
 
-        # Create optimized data loader with pinned memory for GPU transfer
-        train_dataset = TensorDataset(X_train_cpu, y_train_cpu)
+        # Create dataset — SequenceDataset for temporal models, TensorDataset for MLP
+        model_type = self.config.get("type", "mlp").lower()
+        architecture_cfg = self.config.get("architecture") or {}
+        seq_len = architecture_cfg.get("sequence_length")
+        train_dataset: Any  # TensorDataset or SequenceDataset
+        if model_type in ("lstm", "gru") and isinstance(seq_len, int) and seq_len > 0:
+            from .sequence_dataset import SequenceDataset
+
+            train_dataset = SequenceDataset(X_train_cpu, y_train_cpu, seq_len)
+        else:
+            train_dataset = TensorDataset(X_train_cpu, y_train_cpu)
 
         # Use WeightedRandomSampler when sample weights provided (e.g., TB uniqueness weights)
         # This samples higher-weighted samples more frequently, replacing uniform shuffle.
@@ -295,6 +304,20 @@ class ModelTrainer:
                 pin_memory=use_pin_memory,
                 num_workers=0,
             )
+
+        # For temporal models, convert validation data to sequences
+        if model_type in ("lstm", "gru") and X_val is not None and y_val is not None:
+            seq_len = self.config.get("architecture", {}).get("sequence_length")
+            if isinstance(seq_len, int) and seq_len > 0 and X_val.size(0) >= seq_len:
+                # Vectorized sliding window: unfold returns (num_windows, F, seq_len)
+                val_seqs = X_val.unfold(dimension=0, size=seq_len, step=1)
+                # Transpose to (num_windows, seq_len, F) for LSTM batch_first=True
+                val_seqs = val_seqs.transpose(1, 2)
+                # Align labels: each window's label is its last timestamp
+                num_windows = val_seqs.size(0)
+                val_labels = y_val[seq_len - 1 : seq_len - 1 + num_windows]
+                X_val = val_seqs
+                y_val = val_labels
 
         # Move validation data to GPU (smaller, benefits from staying on GPU)
         if X_val is not None:

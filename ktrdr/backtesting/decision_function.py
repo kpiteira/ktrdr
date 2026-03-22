@@ -106,7 +106,7 @@ class DecisionFunction:
 
     def __call__(
         self,
-        features: dict[str, float],
+        features: dict[str, float] | pd.DataFrame,
         position: PositionStatus,
         bar: pd.Series,
         last_signal_time: pd.Timestamp | None = None,
@@ -173,11 +173,11 @@ class DecisionFunction:
             current_position=_POSITION_MAP[position],
         )
 
-    def _predict(self, features: dict[str, float]) -> dict[str, Any]:
+    def _predict(self, features: dict[str, float] | pd.DataFrame) -> dict[str, Any]:
         """Run model forward pass and extract signal + confidence.
 
         Args:
-            features: Feature dict to convert to tensor and feed to model
+            features: Feature dict (MLP) or DataFrame window (LSTM/GRU)
 
         Returns:
             Dict with 'signal' (Signal enum), 'confidence' (float),
@@ -185,9 +185,17 @@ class DecisionFunction:
         """
         import torch
 
-        # Build tensor in feature_names order
-        values = [features[name] for name in self.feature_names]
-        tensor = torch.tensor(values, dtype=torch.float32).unsqueeze(0)
+        if isinstance(features, pd.DataFrame):
+            # Sequence model: features is (seq_len, F) DataFrame
+            # Reorder columns to match feature_names
+            ordered = features[self.feature_names]
+            tensor = torch.tensor(ordered.values, dtype=torch.float32).unsqueeze(
+                0
+            )  # (1, seq_len, F)
+        else:
+            # MLP model: features is dict[str, float]
+            values = [features[name] for name in self.feature_names]
+            tensor = torch.tensor(values, dtype=torch.float32).unsqueeze(0)  # (1, F)
 
         with torch.no_grad():
             outputs = self.model(tensor)

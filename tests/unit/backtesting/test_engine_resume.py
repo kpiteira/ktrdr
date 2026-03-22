@@ -72,6 +72,8 @@ def _make_mock_engine():
         from ktrdr.backtesting.engine import BacktestingEngine
 
         engine = BacktestingEngine.__new__(BacktestingEngine)
+        engine._is_temporal = False
+        engine._sequence_length = 1
 
         # Set up minimal mocks
         engine.config = MagicMock()

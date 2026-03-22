@@ -90,6 +90,8 @@ def _make_engine(data=None, decision_sequence=None):
         from ktrdr.backtesting.engine import BacktestingEngine
 
         engine = BacktestingEngine.__new__(BacktestingEngine)
+        engine._is_temporal = False
+        engine._sequence_length = 1
 
         config = _make_config()
         engine.config = config

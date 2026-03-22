@@ -66,6 +66,12 @@ class ModelMetadata:
     # "classification" (default/zigzag), "regression", "context_classification", "regime_classification"
     output_type: str = "classification"
 
+    # Model architecture type: "mlp", "lstm", "gru"
+    model_type: str = "mlp"
+
+    # Sequence length for temporal models (LSTM/GRU). None for MLP.
+    sequence_length: int | None = None
+
     # Normalization parameters for raw indicator features (hybrid encoding)
     # Maps feature_id -> {method, min, max} or {method, mean, std}
     normalization_params: dict[str, dict[str, Any]] = field(default_factory=dict)
@@ -100,6 +106,8 @@ class ModelMetadata:
             "training_timeframes": self.training_timeframes,
             "training_metrics": self.training_metrics,
             "output_type": self.output_type,
+            "model_type": self.model_type,
+            "sequence_length": self.sequence_length,
             "normalization_params": self.normalization_params,
             "context_data_config": self.context_data_config,
             "context_source_ids": self.context_source_ids,
@@ -133,6 +141,8 @@ class ModelMetadata:
             training_timeframes=data.get("training_timeframes", []),
             training_metrics=data.get("training_metrics", {}),
             output_type=data.get("output_type", "classification"),
+            model_type=data.get("model_type", "mlp"),
+            sequence_length=data.get("sequence_length"),
             normalization_params=data.get("normalization_params", {}),
             context_data_config=data.get("context_data_config"),
             context_source_ids=data.get("context_source_ids", []),
