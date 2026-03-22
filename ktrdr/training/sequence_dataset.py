@@ -32,17 +32,13 @@ class SequenceDataset(Dataset):
             ValueError: If T < sequence_length (insufficient data for even one window)
         """
         if sequence_length < 1:
-            raise ValueError(
-                f"sequence_length must be >= 1, got {sequence_length}"
-            )
+            raise ValueError(f"sequence_length must be >= 1, got {sequence_length}")
         if features.ndim != 2:
             raise ValueError(
                 f"features must be 2D (timestamps, features), got {features.ndim}D"
             )
         if labels.ndim != 1:
-            raise ValueError(
-                f"labels must be 1D (timestamps,), got {labels.ndim}D"
-            )
+            raise ValueError(f"labels must be 1D (timestamps,), got {labels.ndim}D")
         if len(features) != len(labels):
             raise ValueError(
                 f"features and labels must have same length, "

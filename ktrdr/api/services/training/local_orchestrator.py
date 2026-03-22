@@ -490,7 +490,10 @@ class LocalTrainingOrchestrator:
 
         # Evaluate model
         test_metrics = TrainingPipeline.evaluate_model(
-            model, X_test, y_test, output_format=output_format,
+            model,
+            X_test,
+            y_test,
+            output_format=output_format,
             model_config=model_config,
         )
 

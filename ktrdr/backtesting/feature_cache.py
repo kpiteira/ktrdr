@@ -287,12 +287,14 @@ class FeatureCache:
         if timestamp not in self._cached_features.index:
             return None
 
-        idx = self._cached_features.index.get_loc(timestamp)
-        if idx < sequence_length - 1:
+        loc = self._cached_features.index.get_loc(timestamp)
+        if not isinstance(loc, int):
+            return None  # Duplicate timestamps or other non-integer index
+        if loc < sequence_length - 1:
             return None  # Insufficient history
 
-        start = idx - sequence_length + 1
-        return self._cached_features.iloc[start : idx + 1]
+        start = loc - sequence_length + 1
+        return self._cached_features.iloc[start : loc + 1]
 
     def is_ready(self) -> bool:
         """Check if feature cache has pre-computed features.
