@@ -898,6 +898,7 @@ class TrainingPipeline:
         y_test: Optional[torch.Tensor],
         symbol_indices_test: Optional[torch.Tensor] = None,
         output_format: str = "classification",
+        model_config: Optional[dict[str, Any]] = None,
     ) -> dict[str, Any]:
         """
         Evaluate model on test set.
@@ -930,6 +931,19 @@ class TrainingPipeline:
 
         # Move test data to the same device as the model
         device = next(model.parameters()).device
+
+        # For temporal models, convert test data to sequences
+        _model_config = model_config or {}
+        model_type = _model_config.get("type", "mlp").lower()
+        seq_len = _model_config.get("architecture", {}).get("sequence_length")
+        if model_type in ("lstm", "gru") and isinstance(seq_len, int) and seq_len > 0:
+            if X_test.size(0) >= seq_len:
+                X_test_seq = X_test.unfold(dimension=0, size=seq_len, step=1)
+                X_test_seq = X_test_seq.transpose(1, 2)  # (N, seq_len, F)
+                num_windows = X_test_seq.size(0)
+                y_test = y_test[seq_len - 1 : seq_len - 1 + num_windows]
+                X_test = X_test_seq
+
         X_test = X_test.to(device)
         y_test = y_test.to(device)
 
