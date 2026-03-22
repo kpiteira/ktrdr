@@ -1,0 +1,66 @@
+# =============================================================================
+# TB CLASSIFICATION CONTEXT-GATED ENSEMBLE
+# =============================================================================
+# Ensemble using triple-barrier-trained classification signal models with
+# Gaussian MFs + hybrid encoding AND context gate for threshold adjustment.
+#
+# Architecture:
+#   regime_classifier (4-class) → route to per-regime TB signal model
+#   context_classifier (3-class, daily) → threshold modifier
+#   trend_tb_signal → classification signal for trending regimes
+#   range_tb_signal → classification signal for ranging regimes
+#
+# Context gate adjusts confidence_threshold (classification code path):
+#   - aligned_discount: 0.2 → lower threshold for trend-aligned trades
+#   - counter_premium: 0.3 → higher threshold for counter-trend trades
+#   - neutral_effect: 0.05 → minimal adjustment in neutral context
+# =============================================================================
+
+name: tb_context_gated
+description: >-
+  Context-gated ensemble with TB classification signal models. Daily context
+  adjusts confidence_threshold to favor aligned-trend entries and penalize
+  counter-trend entries. Classification models use confidence_threshold
+  (not trade_threshold), so context gate is effective.
+
+models:
+  regime:
+    model_path: models/regime_classifier_seed/1h_latest
+    output_type: regime_classification
+
+  context:
+    model_path: models/context_classifier_seed_v1/1d_latest
+    output_type: context_classification
+
+  trend_signal:
+    model_path: models/trend_tb_gaussian_signal_v1/5m_latest
+    output_type: classification
+
+  range_signal:
+    model_path: models/range_tb_signal_v1/1h_latest
+    output_type: classification
+
+composition:
+  type: regime_route
+  gate_model: regime
+  context_gate: context
+  regime_threshold: 0.4
+  stability_bars: 3
+
+  context_modifiers:
+    aligned_discount: 0.2
+    counter_premium: 0.3
+    neutral_effect: 0.05
+
+  allow_short_from_flat: true
+
+  rules:
+    trending_up:
+      model: trend_signal
+    trending_down:
+      model: trend_signal
+    ranging:
+      model: range_signal
+    volatile:
+      action: FLAT
+  on_regime_transition: close_and_switch
