@@ -121,10 +121,11 @@ decisions:
 training:
   labels:
     source: triple_barrier
-    profit_target_atr: 2.0
-    stop_loss_atr: 1.5
-    max_holding_bars: 24
-    atr_period: 14
+    pt_multiplier: 2.0
+    sl_multiplier: 1.5
+    max_holding_period: 24
+    vol_span: 14
+    vol_method: atr
   loss: focal
   focal_gamma: 2.0
   epochs: 300

@@ -9,7 +9,7 @@
 - Only difference: `model.type: mlp` vs `model.type: lstm` (sequence_length=20, hidden_size=64, 2 layers)
 - Training: EURUSD 5m+1h, 2015-01-01 to 2020-12-31 (6 years)
 - Backtest: EURUSD, 2021-01-01 to 2025-01-01 (4 years out-of-sample)
-- 300 epochs, batch_size=128, focal loss, gradient clip, LR scheduler, early stopping patience=25
+- 300 epochs, batch_size=128, focal loss. Note: gradient_clip, lr_scheduler, and early_stopping were configured in strategy YAML but LocalTrainingOrchestrator does not propagate these to ModelTrainer — both models ran all 300 epochs without early stopping or LR scheduling. This makes the comparison fair (same epoch count) but means neither model benefited from these features.
 
 ## Training Results
 
