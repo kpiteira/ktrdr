@@ -440,7 +440,7 @@ def create(
     console.print(f"  Location: {worktree_path}")
     console.print(f"  Port slot: {slot}")
     console.print(f"  API: http://localhost:{ports.backend}")
-    console.print(f"  Grafana: http://localhost:{ports.grafana}")
+    console.print("  Grafana: http://localhost:43000 (shared)")  # Shared observability
     console.print(f"\nRun 'cd {worktree_path} && ktrdr sandbox up' to start")
 
 
@@ -548,7 +548,7 @@ def init(
     console.print(f"\n[green]Initialized sandbox:[/green] {instance_id}")
     console.print(f"  Port slot: {slot}")
     console.print(f"  API: http://localhost:{ports.backend}")
-    console.print(f"  Grafana: http://localhost:{ports.grafana}")
+    console.print("  Grafana: http://localhost:43000 (shared)")  # Shared observability
     console.print("\nRun 'ktrdr sandbox up' to start")
 
 
@@ -802,12 +802,9 @@ def up(
         console.print("[green]Startability Gate: PASSED[/green]")
         console.print(f"\nInstance ready ({result.duration_seconds:.1f}s):")
         console.print(f"  API: http://localhost:{api_port}/api/v1/docs")
-        console.print(
-            f"  Grafana: http://localhost:{env.get('KTRDR_GRAFANA_PORT', 3000)}"
-        )
-        console.print(
-            f"  Jaeger: http://localhost:{env.get('KTRDR_JAEGER_UI_PORT', 16686)}"
-        )
+        # Shared observability ports (devops-ai)
+        console.print("  Grafana: http://localhost:43000 (shared)")
+        console.print("  Jaeger: http://localhost:46686 (shared)")
     else:
         error_console.print("[red]Startability Gate: FAILED[/red]")
         error_console.print("\nCheck logs with: ktrdr sandbox logs")
@@ -1133,17 +1130,14 @@ def status() -> None:
     # Service URLs
     api_port = env.get("KTRDR_API_PORT", "8000")
     db_port = env.get("KTRDR_DB_PORT", "5432")
-    grafana_port = env.get("KTRDR_GRAFANA_PORT", "3000")
-    jaeger_port = env.get("KTRDR_JAEGER_UI_PORT", "16686")
-    prometheus_port = env.get("KTRDR_PROMETHEUS_PORT", "9090")
-
+    # Shared observability ports (devops-ai)
     console.print("[bold]Services:[/bold]")
     console.print(f"  Backend:    http://localhost:{api_port}")
     console.print(f"  API Docs:   http://localhost:{api_port}/api/v1/docs")
     console.print(f"  Database:   localhost:{db_port}")
-    console.print(f"  Grafana:    http://localhost:{grafana_port}")
-    console.print(f"  Jaeger:     http://localhost:{jaeger_port}")
-    console.print(f"  Prometheus: http://localhost:{prometheus_port}")
+    console.print("  Grafana:    http://localhost:43000 (shared)")
+    console.print("  Jaeger:     http://localhost:46686 (shared)")
+    console.print("  Prometheus: http://localhost:49090 (shared)")
 
     console.print()
     console.print("[bold]Workers:[/bold]")

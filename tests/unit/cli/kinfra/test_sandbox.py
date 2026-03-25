@@ -330,9 +330,6 @@ class TestSlotPortRefresh:
                     "ports": {
                         "api": 8003,
                         "db": 5435,
-                        "grafana": 3003,
-                        "jaeger_ui": 16689,
-                        "prometheus": 9093,
                     },
                     "claimed_by": None,
                     "claimed_at": None,
@@ -350,9 +347,7 @@ class TestSlotPortRefresh:
         slot1_ports = updated["slots"]["1"]["ports"]
         assert slot1_ports["api"] == 8001
         assert slot1_ports["db"] == 5433
-        assert slot1_ports["grafana"] == 3001
-        assert slot1_ports["jaeger_ui"] == 16687
-        assert slot1_ports["prometheus"] == 9091
+        # Observability ports no longer allocated per slot (shared stack)
 
     def test_provision_preserves_claim_state(self, tmp_path, monkeypatch) -> None:
         """Port refresh should not disturb claimed_by or status."""
@@ -380,9 +375,6 @@ class TestSlotPortRefresh:
                     "ports": {
                         "api": 9999,
                         "db": 9998,
-                        "grafana": 9997,
-                        "jaeger_ui": 9996,
-                        "prometheus": 9995,
                     },
                     "claimed_by": "/some/worktree",
                     "claimed_at": "2026-02-16T00:00:00+00:00",

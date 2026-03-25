@@ -3,6 +3,9 @@ Tests for the sandbox port allocation module.
 
 This module tests port slot allocation for sandbox instances,
 ensuring deterministic port mapping and conflict detection.
+
+Observability (Jaeger, Grafana, Prometheus) runs as a shared stack
+via devops-ai on fixed ports — not allocated per slot.
 """
 
 import socket
@@ -20,15 +23,9 @@ class TestPortAllocation:
 
         ports = get_ports(0)
 
-        # Standard ports from current docker-compose.yml
         assert ports.slot == 0
         assert ports.backend == 8000
         assert ports.db == 5432
-        assert ports.grafana == 3000
-        assert ports.jaeger_ui == 16686
-        assert ports.jaeger_otlp_grpc == 4317
-        assert ports.jaeger_otlp_http == 4318
-        assert ports.prometheus == 9090
         assert ports.worker_ports == [5003, 5004, 5005, 5006]
 
     def test_slot_1_returns_offset_ports(self):
@@ -40,12 +37,6 @@ class TestPortAllocation:
         assert ports.slot == 1
         assert ports.backend == 8001
         assert ports.db == 5433
-        assert ports.grafana == 3001
-        assert ports.jaeger_ui == 16687
-        # Jaeger OTLP uses 10-slot offset to avoid overlap
-        assert ports.jaeger_otlp_grpc == 4327
-        assert ports.jaeger_otlp_http == 4328
-        assert ports.prometheus == 9091
         # Worker ports for slot 1: 5007-5010 (shifted to avoid slot 0's 5003-5006)
         assert ports.worker_ports == [5007, 5008, 5009, 5010]
 
@@ -69,12 +60,6 @@ class TestPortAllocation:
         assert ports.slot == 10
         assert ports.backend == 8010
         assert ports.db == 5442
-        assert ports.grafana == 3010
-        assert ports.jaeger_ui == 16696
-        # Slot 10: 4317 + 10*10 = 4417
-        assert ports.jaeger_otlp_grpc == 4417
-        assert ports.jaeger_otlp_http == 4418
-        assert ports.prometheus == 9100
         # Worker ports for slot 10: 5007 + (10-1)*10 = 5097
         assert ports.worker_ports == [5097, 5098, 5099, 5100]
 
@@ -103,20 +88,18 @@ class TestToEnvDict:
         ports = get_ports(1)
         env = ports.to_env_dict()
 
-        # Check all required keys are present
         assert env["SLOT_NUMBER"] == "1"
         assert env["KTRDR_API_PORT"] == "8001"
         assert env["KTRDR_DB_PORT"] == "5433"
-        assert env["KTRDR_GRAFANA_PORT"] == "3001"
-        assert env["KTRDR_JAEGER_UI_PORT"] == "16687"
-        assert env["KTRDR_OTLP_GRPC_PORT"] == "4327"
-        assert env["KTRDR_OTLP_HTTP_PORT"] == "4328"
-        assert env["KTRDR_PROMETHEUS_PORT"] == "9091"
         # Slot 1 worker ports: 5007-5010 (shifted to avoid slot 0's 5003-5006)
         assert env["KTRDR_WORKER_PORT_1"] == "5007"
         assert env["KTRDR_WORKER_PORT_2"] == "5008"
         assert env["KTRDR_WORKER_PORT_3"] == "5009"
         assert env["KTRDR_WORKER_PORT_4"] == "5010"
+        # No observability ports (shared stack)
+        assert "KTRDR_GRAFANA_PORT" not in env
+        assert "KTRDR_JAEGER_UI_PORT" not in env
+        assert "KTRDR_PROMETHEUS_PORT" not in env
 
     def test_to_env_dict_all_values_are_strings(self):
         """All values in env dict should be strings."""
@@ -154,24 +137,17 @@ class TestAllPorts:
         assert all(isinstance(p, int) for p in all_ports)
 
     def test_all_ports_contains_all_services(self):
-        """all_ports() should contain all 11 ports."""
+        """all_ports() should contain all 6 ports (2 services + 4 workers)."""
         from ktrdr.cli.sandbox_ports import get_ports
 
         ports = get_ports(1)
         all_ports = ports.all_ports()
 
-        # 7 service ports + 4 worker ports = 11 total
-        assert len(all_ports) == 11
+        # 2 service ports + 4 worker ports = 6 total
+        assert len(all_ports) == 6
 
-        # Verify specific ports are included
         assert 8001 in all_ports  # backend
         assert 5433 in all_ports  # db
-        assert 3001 in all_ports  # grafana
-        assert 16687 in all_ports  # jaeger_ui
-        assert 4327 in all_ports  # jaeger_otlp_grpc
-        assert 4328 in all_ports  # jaeger_otlp_http
-        assert 9091 in all_ports  # prometheus
-        # Slot 1 worker ports: 5007-5010
         assert 5007 in all_ports  # worker 1
         assert 5008 in all_ports  # worker 2
         assert 5009 in all_ports  # worker 3
@@ -185,8 +161,6 @@ class TestPortAvailability:
         """is_port_free() returns True for unused port."""
         from ktrdr.cli.sandbox_ports import is_port_free
 
-        # Port 59999 is unlikely to be in use
-        # Using a high port to avoid conflicts
         result = is_port_free(59999)
         assert result is True
 
@@ -194,7 +168,6 @@ class TestPortAvailability:
         """is_port_free() returns False when port is in use."""
         from ktrdr.cli.sandbox_ports import is_port_free
 
-        # Bind a socket to test
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.bind(("127.0.0.1", 59998))
             s.listen(1)
@@ -206,7 +179,6 @@ class TestPortAvailability:
         """check_ports_available() returns empty list when all ports free."""
         from ktrdr.cli.sandbox_ports import check_ports_available
 
-        # Mock is_port_free to return True for all
         with patch("ktrdr.cli.sandbox_ports.is_port_free", return_value=True):
             conflicts = check_ports_available(5)
             assert conflicts == []
@@ -217,7 +189,6 @@ class TestPortAvailability:
 
         ports = get_ports(3)
 
-        # Mock: only backend port is in use
         def mock_is_port_free(port):
             return port != ports.backend
 
@@ -242,7 +213,6 @@ class TestSlotConsistency:
             ports = get_ports(slot)
             slot_ports = set(ports.all_ports())
 
-            # Check no overlap with previous slots
             overlap = all_ports_seen & slot_ports
             assert not overlap, f"Slot {slot} overlaps with previous slots: {overlap}"
 

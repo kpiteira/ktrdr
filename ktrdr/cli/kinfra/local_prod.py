@@ -190,7 +190,7 @@ def init() -> None:
     console.print(f"  Location: {cwd}")
     console.print(f"  Port slot: {LOCAL_PROD_SLOT} (standard ports)")
     console.print(f"  API: http://localhost:{ports.backend}")
-    console.print(f"  Grafana: http://localhost:{ports.grafana}")
+    console.print("  Grafana: http://localhost:43000 (shared)")  # Shared observability
     console.print("\nRun 'ktrdr local-prod up' to start")
 
 
@@ -324,16 +324,14 @@ def status() -> None:
     # Service URLs
     api_port = env.get("KTRDR_API_PORT", "8000")
     db_port = env.get("KTRDR_DB_PORT", "5432")
-    grafana_port = env.get("KTRDR_GRAFANA_PORT", "3000")
-    jaeger_port = env.get("KTRDR_JAEGER_UI_PORT", "16686")
-
+    # Shared observability ports (devops-ai)
     console.print()
     console.print("[bold]Services:[/bold]")
     console.print(f"  Backend:    http://localhost:{api_port}")
     console.print(f"  API Docs:   http://localhost:{api_port}/api/v1/docs")
     console.print(f"  Database:   localhost:{db_port}")
-    console.print(f"  Grafana:    http://localhost:{grafana_port}")
-    console.print(f"  Jaeger:     http://localhost:{jaeger_port}")
+    console.print("  Grafana:    http://localhost:43000 (shared)")
+    console.print("  Jaeger:     http://localhost:46686 (shared)")
 
     console.print()
     console.print("[bold]Workers:[/bold]")

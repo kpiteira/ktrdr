@@ -61,10 +61,10 @@ def _derive_otlp_endpoint_from_url(api_url: str | None) -> str:
     try:
         from ktrdr.cli.sandbox_detect import get_sandbox_var
 
-        port = get_sandbox_var("KTRDR_OTLP_GRPC_PORT", "4317")
-        return f"http://localhost:{port}"
+        # Shared observability stack via devops-ai on fixed port
+        return "http://localhost:44317"
     except Exception:
-        return "http://localhost:4317"
+        return "http://localhost:44317"
 
 
 def reconfigure_telemetry_for_url(api_url: str) -> None:
