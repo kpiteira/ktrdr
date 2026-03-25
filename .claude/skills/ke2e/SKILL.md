@@ -41,7 +41,7 @@ Used by:
 | [training/fred-context-data](tests/training/fred-context-data.md) | Training (Feature) | ~2min | FRED context data |
 | [training/gaussian-hybrid-dead-zone-elimination](tests/training/gaussian-hybrid-dead-zone-elimination.md) | Training (Feature) | ~2min | Gaussian hybrid |
 | [training/experiment-1-tb-vs-forward-return](tests/training/experiment-1-tb-vs-forward-return.md) | Training (Experiment) | ~5min | TB vs forward return |
-| [training/lstm-temporal-model](tests/training/lstm-temporal-model.md) | Training (Feature) | ~3min | LSTM temporal model |
+| [training/lstm-temporal-model](tests/training/lstm-temporal-model.md) | Training (Feature) | ~8–15min | LSTM temporal model |
 
 ### Backtest (16 tests)
 
@@ -63,7 +63,7 @@ Used by:
 | [backtest/context-data-multi-provider](tests/backtest/context-data-multi-provider.md) | Backtest (Feature) | ~2min | Multi-provider context |
 | [backtest/ensemble-regime-routed](tests/backtest/ensemble-regime-routed.md) | Backtest (Feature) | ~3min | Regime-routed ensemble |
 | [backtest/execution-realism](tests/backtest/execution-realism.md) | Backtest (Feature) | ~2min | Execution realism |
-| [backtest/lstm-temporal-backtest](tests/backtest/lstm-temporal-backtest.md) | Backtest (Feature) | ~3min | LSTM temporal backtest |
+| [backtest/lstm-temporal-backtest](tests/backtest/lstm-temporal-backtest.md) | Backtest (Feature) | ~8–15min | LSTM temporal backtest |
 
 ### Backtesting Integration (2 tests)
 
