@@ -6,7 +6,7 @@ architecture: docs/designs/research-squad/ARCHITECTURE.md
 # M1: Squad Bootstrap + First Cycle
 
 ## Goal
-Prove the squad mechanism works: 8 agents with distinct perspectives discuss, debate, produce an experiment specification, execute it via ktrdr, and evaluate the results. One full cycle, end to end.
+The squad produces an experiment informed by prior knowledge (seeded history), with visible tension between agent perspectives (Inventor proposes something novel, Quant grounds it in reality, Critic demands rigor — not consensus), and evaluates real backtest results honestly. One full cycle proving the mechanism produces qualitatively different output than a single agent would.
 
 ## Tasks
 
@@ -192,18 +192,20 @@ Execute one complete research cycle manually. This is the integration test: Coor
 7. Verify state updates: experiments.md has a new entry, hypotheses.md updated
 
 **Testing Requirements:**
-- [ ] Squad produces an experiment that's qualitatively informed by the seeded history (not random)
+- [ ] Squad produces an experiment informed by seeded history (references known decisions like "MLP is dead" or "LSTM finds temporal signal")
+- [ ] At least 2 agents visibly disagree during the cycle (Inventor vs Quant, or Critic challenging the plan)
 - [ ] Experiment trains and backtests without error
-- [ ] Critic evaluates real results (not self-assessment)
+- [ ] Critic evaluates real results using Tier 1 metrics (not self-assessment)
 - [ ] Scribe produces state updates that could be read by the next cycle
 - [ ] Agent histories contain meaningful learnings from this cycle
 
 **Acceptance Criteria:**
 - [ ] One complete cycle: ORIENT → STRATEGIZE → DESIGN → EXECUTE → EVALUATE → LEARN
-- [ ] Experiment spec is influenced by prior knowledge (references past results or known decisions)
-- [ ] Real backtest metrics produced and evaluated
+- [ ] Experiment spec is informed by prior knowledge AND agent debate (not what a single agent would produce)
+- [ ] Visible tension: at least one agent pushes back on the plan and the plan is modified as a result
+- [ ] Real backtest metrics produced and evaluated by Critic
 - [ ] `.squad/knowledge/experiments.md` has a new structured entry
-- [ ] At least 2 agent `history.md` files have new content
+- [ ] At least 3 agent `history.md` files have new content
 
 ---
 

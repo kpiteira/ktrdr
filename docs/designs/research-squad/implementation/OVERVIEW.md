@@ -13,11 +13,11 @@ architecture: docs/designs/research-squad/ARCHITECTURE.md
 
 | Milestone | Name | Tasks | Dependencies | JTBD |
 |-----------|------|-------|-------------|------|
-| M1 | Squad Bootstrap + First Cycle | 6 | None | Prove the squad mechanism works: 8 agents discuss, produce an experiment spec, execute it, evaluate results |
-| M2 | Autonomous Loop | 4 | M1 | Run N cycles unattended with disk-based state, Ralph loop pattern |
-| M3 | Scout + External Research | 3 | M2 | Scout searches the web for papers/techniques and brings actionable insights to the squad |
-| M4 | Architect + Capability Pipeline | 3 | M2 | Architect identifies gaps, files GitHub issues, squad gets notified when capabilities are built |
-| M5 | Synthesis + Long-Run Evaluation | 3 | M2 | Scribe produces macro synthesis, context management for 50+ experiments, evaluate whether the squad compounds knowledge |
+| M1 | Squad Bootstrap + First Cycle | 6 | None | The squad produces an experiment informed by prior knowledge, with visible tension between agent perspectives (not consensus), and evaluates real backtest results honestly |
+| M2 | Autonomous Loop | 4 | M1 | The squad runs unattended for N cycles, explores at least 2 distinct frontiers (not just parameter variants), and the Director makes a strategic pivot when a frontier shows diminishing returns |
+| M3 | Scout + External Research | 3 | M2 | The squad discovers an external technique or data source it wouldn't have found from its own experiments, and incorporates it into an experiment design |
+| M4 | Architect + Capability Pipeline | 3 | M2 | A capability gap blocks a promising experiment, the Architect files an issue with enough detail to build it, and once built, the squad uses it to test a previously blocked hypothesis |
+| M5 | Synthesis + Long-Run Evaluation | 3 | M2 | After 20+ experiments, the squad demonstrably compounds knowledge — later experiments are qualitatively more sophisticated than early ones, and the squad outperforms a single-agent baseline |
 
 **Total:** 19 tasks across 5 milestones
 

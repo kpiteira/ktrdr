@@ -6,7 +6,7 @@ architecture: docs/designs/research-squad/ARCHITECTURE.md
 # M4: Architect + Capability Pipeline
 
 ## Goal
-The Architect identifies capability gaps, produces detailed GitHub issues, and the squad gets notified when new capabilities become available.
+A promising experiment is blocked by a missing capability. The Architect identifies the gap, files a GitHub issue with enough detail to build it, and once built, the squad uses the new capability to test a previously blocked hypothesis. The squad's toolbox grows through its own research needs — not through pre-planned infrastructure.
 
 ## Dependencies
 - M2 complete (autonomous loop running)

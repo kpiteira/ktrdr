@@ -6,7 +6,7 @@ architecture: docs/designs/research-squad/ARCHITECTURE.md
 # M5: Synthesis + Long-Run Evaluation
 
 ## Goal
-The Scribe produces macro synthesis from accumulated experiments. Context management handles 50+ experiments without overflow. Evaluate whether the squad mechanism actually compounds knowledge and produces qualitatively better experiments over time.
+After 20+ experiments, the squad demonstrably compounds knowledge — later experiments are qualitatively more sophisticated than early ones (different architectures, not just parameter tweaks), and the squad outperforms what a single-agent loop would produce. The Scribe's synthesis enables scaling to 50+ experiments without context overflow.
 
 ## Dependencies
 - M2 complete (autonomous loop running, at least 10-20 experiments accumulated)
@@ -88,7 +88,7 @@ Implement context management so the squad scales to 50+ experiments without cont
 After 20-30 experiments, evaluate whether the squad mechanism works. This is the meta-experiment: does collaborative multi-agent reasoning produce better trading architectures than a single agent or random search?
 
 **Evaluation criteria:**
-1. **Qualitative progression:** Do later experiments involve fundamentally different architectures than early ones? (Not just parameter tweaks)
+1. **Qualitative progression:** Do later experiments involve fundamentally different architectures than early ones? (Not just parameter tweaks — different model types, data sources, compositions)
 2. **Frontier diversity:** Has the squad explored multiple frontiers (cross-asset, attention, exit timing, etc.) or converged on one?
 3. **Knowledge compounding:** Does synthesis.md contain insights that wouldn't be obvious from any single experiment?
 4. **Best result trajectory:** Is the best Sharpe/win rate improving over time?
@@ -96,18 +96,27 @@ After 20-30 experiments, evaluate whether the squad mechanism works. This is the
 6. **Scout influence:** Has the Scout brought external knowledge that changed the research direction?
 7. **Decision quality:** Are decisions.md entries well-reasoned and respected by later experiments?
 
+**Baseline comparison (critical):**
+Run the same number of experiments with a single-agent loop (the existing research pipeline) using the same compute budget. Compare:
+- Best Sharpe achieved (squad vs single agent)
+- Number of distinct architectural frontiers explored
+- Whether the single agent ever makes a qualitative leap (model type change, data source change)
+This is the control experiment. If the squad doesn't beat a single agent, the mechanism doesn't add value.
+
 **Document findings in `squad_evaluation.md` with:**
 - Experiment progression timeline (what was tried, in what order)
 - Best result achieved and the architecture that produced it
 - Evidence for/against knowledge compounding
+- Baseline comparison: squad vs single-agent on same number of experiments
 - What worked about the squad model and what didn't
 - Recommendations for the next phase (adapt roles, change cadence, add agents, etc.)
 
 **Acceptance Criteria:**
 - [ ] Honest evaluation with evidence for each criterion
-- [ ] Clear conclusion: does the squad mechanism compound knowledge?
+- [ ] Baseline comparison completed (squad vs single-agent loop)
+- [ ] Clear conclusion: does the squad mechanism compound knowledge AND outperform single-agent?
 - [ ] Specific recommendations for improvement
-- [ ] Comparison to what a single-agent loop would likely have produced
+- [ ] If squad doesn't outperform: honest analysis of why and what to change
 
 ## Completion Checklist
 - [ ] Scribe produces meaningful synthesis from 10+ experiments

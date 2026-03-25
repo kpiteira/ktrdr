@@ -6,7 +6,7 @@ architecture: docs/designs/research-squad/ARCHITECTURE.md
 # M3: Scout + External Research
 
 ## Goal
-The Scout agent actively searches the internet for relevant publications, techniques, and approaches, bringing actionable external insights into the squad's decision-making.
+The squad discovers an external technique, data source, or approach it wouldn't have found from its own experiments, and incorporates it into an experiment design. The Scout brings the outside world into the research loop — preventing closed-world thinking where the squad only knows what it has tried.
 
 ## Dependencies
 - M2 complete (autonomous loop running)

@@ -6,7 +6,7 @@ architecture: docs/designs/research-squad/ARCHITECTURE.md
 # M2: Autonomous Loop
 
 ## Goal
-The squad runs N cycles unattended using the Ralph loop pattern: fresh context per iteration, all state on disk, backpressure from real backtests. The Director controls cadence (full squad vs quick iteration).
+The squad runs unattended for N cycles, explores at least 2 distinct architectural frontiers (not just parameter variants within one approach), and the Director makes a strategic pivot when a frontier shows diminishing returns. Proves the loop compounds — cycle 5 builds on cycles 1-4, not just the last one.
 
 ## Dependencies
 - M1 complete (Coordinator + Executor + knowledge base proven in one manual cycle)
@@ -127,22 +127,24 @@ Automate the Scribe's state updates. After each cycle, the loop runner parses th
 **Estimated time:** 3-4 hours (including training time for 5 experiments)
 
 **Description:**
-Validate autonomous operation by running 5 complete cycles without intervention.
+Validate autonomous operation by running 5+ complete cycles without intervention. The key test: does the squad explore multiple frontiers and pivot when one stalls?
 
 1. Load the `ke2e` skill
-2. Configure loop runner for 5 iterations
+2. Configure loop runner for 5-7 iterations
 3. Start the loop and let it run
 4. Verify after completion:
-   - 5 experiments in experiments.md
-   - Each experiment has real backtest results
-   - Agent histories grew
-   - No cycle repeated an identical experiment
-   - Director made at least one cadence decision
+   - All experiments in experiments.md with real backtest results
+   - At least 2 distinct architectural frontiers explored (e.g., "different model type" or "different data source" or "different composition" — not just "different indicator parameters")
+   - Director made at least one cadence change (full_squad → quick_iteration or vice versa)
+   - Experiment N references learnings from experiments before N-1 (not just the last one — compounding test)
+   - Agent histories grew and contain cycle-specific learnings
 
 **Acceptance Criteria:**
-- [ ] 5 cycles complete without human intervention
-- [ ] Each experiment is distinct (not repeating the same strategy)
-- [ ] State files accurately reflect all 5 cycles
+- [ ] 5+ cycles complete without human intervention
+- [ ] At least 2 distinct frontiers explored (verified by examining experiment architectures)
+- [ ] Director made a strategic decision (cadence change or frontier pivot)
+- [ ] At least one experiment explicitly builds on a non-adjacent prior experiment (compounding)
+- [ ] State files accurately reflect all cycles
 - [ ] No crashes or unrecovered errors
 
 ## Completion Checklist
