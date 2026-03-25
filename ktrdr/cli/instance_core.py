@@ -456,12 +456,9 @@ def start_instance(
         console.print("[green]Startability Gate: PASSED[/green]")
         console.print(f"\nInstance ready ({result.duration_seconds:.1f}s):")
         console.print(f"  API: http://localhost:{api_port}/api/v1/docs")
-        console.print(
-            f"  Grafana: http://localhost:{env.get('KTRDR_GRAFANA_PORT', 3000)}"
-        )
-        console.print(
-            f"  Jaeger: http://localhost:{env.get('KTRDR_JAEGER_UI_PORT', 16686)}"
-        )
+        # Shared observability ports (devops-ai)
+        console.print("  Grafana: http://localhost:43000 (shared)")
+        console.print("  Jaeger: http://localhost:46686 (shared)")
         return 0
     else:
         error_console.print("[red]Startability Gate: FAILED[/red]")

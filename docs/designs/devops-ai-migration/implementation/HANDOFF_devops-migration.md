@@ -40,3 +40,23 @@
 
 ### Gotchas
 - `backtesting/` and `backtest/` are separate categories (2 integration tests vs 16 core tests). Not merged — they serve different purposes.
+
+## M3: Shared Observability
+
+### Compose changes
+- Removed jaeger, prometheus, grafana services (~72 lines) + their named volumes
+- Removed backend's depends_on jaeger
+- Added `devops-ai-observability` external network to 7 services (backend + 4 workers + 2 agents)
+- Updated all 10 OTEL endpoints to `http://devops-ai-jaeger:4317`
+
+### sandbox_ports.py
+- Removed 5 fields: grafana, jaeger_ui, jaeger_otlp_grpc, jaeger_otlp_http, prometheus
+- 6 ports per slot (down from 11)
+
+### Port reference cleanup
+- Fixed ~20 display strings to show shared ports (43000, 46686, 49090) with "(shared)"
+- CLI telemetry endpoint updated to shared OTLP port 44317
+
+### Gotchas
+- mypy has 59 pre-existing errors (same on main)
+- GF_ADMIN_PASSWORD secret no longer needed (grafana is shared)

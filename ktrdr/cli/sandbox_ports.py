@@ -6,6 +6,9 @@ without port conflicts.
 
 Slot 0 uses standard development ports (8000, 5432, etc.).
 Slots 1-10 use offset ports for sandbox instances.
+
+Observability (Jaeger, Grafana, Prometheus) runs as a shared stack via
+devops-ai on fixed ports (46686, 43000, 49090) — not allocated per slot.
 """
 
 import socket
@@ -25,11 +28,6 @@ class PortAllocation:
     slot: int
     backend: int
     db: int
-    grafana: int
-    jaeger_ui: int
-    jaeger_otlp_grpc: int
-    jaeger_otlp_http: int
-    prometheus: int
     worker_ports: list[int]  # 4 worker ports
 
     def to_env_dict(self) -> dict[str, str]:
@@ -43,11 +41,6 @@ class PortAllocation:
             "SLOT_NUMBER": str(self.slot),
             "KTRDR_API_PORT": str(self.backend),
             "KTRDR_DB_PORT": str(self.db),
-            "KTRDR_GRAFANA_PORT": str(self.grafana),
-            "KTRDR_JAEGER_UI_PORT": str(self.jaeger_ui),
-            "KTRDR_OTLP_GRPC_PORT": str(self.jaeger_otlp_grpc),
-            "KTRDR_OTLP_HTTP_PORT": str(self.jaeger_otlp_http),
-            "KTRDR_PROMETHEUS_PORT": str(self.prometheus),
             "KTRDR_WORKER_PORT_1": str(self.worker_ports[0]),
             "KTRDR_WORKER_PORT_2": str(self.worker_ports[1]),
             "KTRDR_WORKER_PORT_3": str(self.worker_ports[2]),
@@ -57,16 +50,11 @@ class PortAllocation:
     def all_ports(self) -> list[int]:
         """Return all ports for conflict checking.
 
-        Returns a list of all ports (7 services + 4 workers).
+        Returns a list of all ports (2 services + 4 workers).
         """
         return [
             self.backend,
             self.db,
-            self.grafana,
-            self.jaeger_ui,
-            self.jaeger_otlp_grpc,
-            self.jaeger_otlp_http,
-            self.prometheus,
             *self.worker_ports,
         ]
 
@@ -94,11 +82,6 @@ def get_ports(slot: int) -> PortAllocation:
             slot=0,
             backend=8000,
             db=5432,
-            grafana=3000,
-            jaeger_ui=16686,
-            jaeger_otlp_grpc=4317,
-            jaeger_otlp_http=4318,
-            prometheus=9090,
             worker_ports=[5003, 5004, 5005, 5006],
         )
 
@@ -107,11 +90,6 @@ def get_ports(slot: int) -> PortAllocation:
         slot=slot,
         backend=8000 + slot,
         db=5432 + slot,
-        grafana=3000 + slot,
-        jaeger_ui=16686 + slot,
-        jaeger_otlp_grpc=4317 + slot * 10,  # 4327, 4337, ... (10-slot offset)
-        jaeger_otlp_http=4318 + slot * 10,  # 4328, 4338, ...
-        prometheus=9090 + slot,
         worker_ports=[
             5007 + (slot - 1) * 10,  # 5007, 5017, 5027, ...
             5007 + (slot - 1) * 10 + 1,  # 5008, 5018, 5028, ...
