@@ -7,7 +7,7 @@ The gate performs four sequential checks:
 1. Database - accepts TCP connections
 2. Backend - /api/v1/health returns 200
 3. Workers - at least 4 workers registered
-4. Observability - Jaeger UI responding
+4. Observability - shared Jaeger UI responding (port 46686)
 
 Each check polls with a timeout until it passes or the deadline is reached.
 """
@@ -255,15 +255,13 @@ class StartabilityGate:
             )
 
     async def _check_observability(self) -> CheckResult:
-        """Check Jaeger UI is responding.
+        """Check shared Jaeger UI is responding.
 
         Returns:
             CheckResult indicating observability status.
         """
-        # Calculate Jaeger UI port from API port offset
-        # API 8001 → Jaeger 16687, API 8002 → Jaeger 16688, etc.
-        jaeger_port = 16686 + (self.api_port - 8000)
-        url = f"http://localhost:{jaeger_port}"
+        # Shared observability stack via devops-ai on fixed port
+        url = "http://localhost:46686"
 
         try:
             async with httpx.AsyncClient(timeout=5.0) as client:
