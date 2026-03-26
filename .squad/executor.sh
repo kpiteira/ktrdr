@@ -51,7 +51,7 @@ poll_operation() {
 
     while (( attempt < MAX_POLL_ATTEMPTS )); do
         local status_json
-        status_json=$(uv run ktrdr status "$op_id" --json 2>/dev/null) || true
+        status_json=$(uv run ktrdr --json status "$op_id" 2>/dev/null) || true
 
         if [ -z "$status_json" ]; then
             log "Poll $attempt: no response for $op_id, retrying..."
@@ -133,7 +133,7 @@ log "Strategy written to $SHARED_STRATEGIES/${NAME}.yaml"
 
 # Step 2: Start training (fire-and-forget)
 log "Starting training..."
-TRAIN_OUTPUT=$(uv run ktrdr train "$NAME" --start "$TRAIN_START" --end "$TRAIN_END" --json 2>&1) || {
+TRAIN_OUTPUT=$(uv run ktrdr --json train "$NAME" --start "$TRAIN_START" --end "$TRAIN_END" 2>&1) || {
     log "Training command failed"
     echo "{\"error\": \"training_start_failed\", \"output\": $(echo "$TRAIN_OUTPUT" | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read()))')}"
     exit 1
@@ -172,14 +172,14 @@ log "Model path: $MODEL_PATH"
 
 # Step 5: Start backtest
 log "Starting backtest..."
-BT_ARGS="$NAME --start $BT_START --end $BT_END"
+BT_CMD=(uv run ktrdr --json backtest "$NAME" --start "$BT_START" --end "$BT_END")
 if [ -n "$MODEL_PATH" ] && [ "$MODEL_PATH" != "models/${NAME}/latest" ]; then
-    BT_ARGS="$BT_ARGS --model-path $MODEL_PATH"
+    BT_CMD+=(--model-path "$MODEL_PATH")
 fi
 
-BT_OUTPUT=$(uv run ktrdr backtest $BT_ARGS 2>&1) || {
+BT_OUTPUT=$("${BT_CMD[@]}" 2>&1) || {
     log "Backtest command failed"
-    python3 -c "import json; print(json.dumps({'error': 'backtest_start_failed', 'output': '''$BT_OUTPUT'''}))"
+    printf '%s' "$BT_OUTPUT" | python3 -c 'import sys, json; print(json.dumps({"error": "backtest_start_failed", "output": sys.stdin.read()}))'
     exit 1
 }
 

@@ -133,6 +133,10 @@ training:
   epochs: 200
   learning_rate: 0.001
   batch_size: 64
+  # NOTE: These fields are valid v3 grammar but the LocalTrainingOrchestrator
+  # does not currently propagate them to ModelTrainer. They had no effect in
+  # Cycle 1 (D8: training infra is not the bottleneck). Kept for documentation
+  # and future wiring.
   gradient_clip: 1.0
   lr_scheduler:
     type: reduce_on_plateau
