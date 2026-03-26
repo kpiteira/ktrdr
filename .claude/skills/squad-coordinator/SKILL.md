@@ -32,8 +32,11 @@ Read these files to build context:
 ~/.ktrdr/shared/squad/knowledge/synthesis.md      # Macro patterns (if populated)
 ~/.ktrdr/shared/squad/loop/last-result.md         # Most recent experiment results
 ~/.ktrdr/shared/squad/loop/iteration-count.txt    # How many cycles we've done
+~/.ktrdr/shared/squad/loop/nudges.md              # Human feedback — READ FIRST, high priority
 ~/.ktrdr/shared/squad/agents/{role}/history.md    # What each agent has learned
 ```
+
+**Important:** If `nudges.md` has active entries, include them in the Scribe's ORIENT briefing and in the relevant agent's context. Nudges are corrections or strategic guidance from the human partner — they take priority over agent-generated conclusions. The Scribe clears addressed nudges during LEARN.
 
 ---
 
