@@ -1,0 +1,143 @@
+name: squad_cycle1_control
+version: "3.0"
+description: >
+  Squad Cycle 1 — LSTM baseline with corrected training infrastructure.
+  Same indicators/fuzzy/model as H_003, but with properly wired LR scheduler,
+  gradient clipping, and early stopping. Tests whether training infrastructure
+  improvements break the 61% wall. Longer max_holding_period (50 vs 24) to
+  allow triple barrier labels to capture multi-day moves.
+  Train 2015-2020, backtest 2021-2025.
+
+training_data:
+  symbols:
+    mode: single
+    symbol: EURUSD
+  timeframes:
+    mode: multi_timeframe
+    list: ["5m", "1h"]
+    base_timeframe: "1h"
+  date_range:
+    start: "2015-01-01"
+    end: "2020-12-31"
+  history_required: 100
+
+indicators:
+  rsi_14:
+    type: rsi
+    period: 14
+  adx_14:
+    type: adx
+    period: 14
+  macd_12_26_9:
+    type: macd
+    fast_period: 12
+    slow_period: 26
+    signal_period: 9
+  roc_10:
+    type: roc
+    period: 10
+
+fuzzy_sets:
+  rsi_momentum:
+    indicator: rsi_14
+    low:
+      type: gaussian
+      parameters: [30, 15]
+    neutral:
+      type: gaussian
+      parameters: [50, 12]
+    high:
+      type: gaussian
+      parameters: [70, 15]
+  adx_trend:
+    indicator: adx_14.adx
+    weak:
+      type: gaussian
+      parameters: [15, 10]
+    moderate:
+      type: gaussian
+      parameters: [30, 10]
+    strong:
+      type: gaussian
+      parameters: [50, 15]
+  macd_direction:
+    indicator: macd_12_26_9.line
+    bearish:
+      type: gaussian
+      parameters: [-0.002, 0.002]
+    neutral:
+      type: gaussian
+      parameters: [0, 0.0015]
+    bullish:
+      type: gaussian
+      parameters: [0.002, 0.002]
+  roc_momentum:
+    indicator: roc_10
+    falling:
+      type: gaussian
+      parameters: [-0.4, 0.35]
+    flat:
+      type: gaussian
+      parameters: [0, 0.25]
+    rising:
+      type: gaussian
+      parameters: [0.4, 0.35]
+
+nn_inputs:
+  - fuzzy_set: rsi_momentum
+    timeframes: all
+  - raw_indicator: rsi_14
+    timeframes: all
+    normalization: minmax
+  - fuzzy_set: adx_trend
+    timeframes: all
+  - raw_indicator: adx_14.adx
+    timeframes: all
+    normalization: minmax
+  - fuzzy_set: macd_direction
+    timeframes: all
+  - raw_indicator: macd_12_26_9.line
+    timeframes: all
+    normalization: zscore
+  - fuzzy_set: roc_momentum
+    timeframes: all
+  - raw_indicator: roc_10
+    timeframes: all
+    normalization: zscore
+
+model:
+  type: lstm
+  architecture:
+    sequence_length: 20
+    hidden_size: 64
+    num_layers: 2
+    dropout: 0.3
+
+decisions:
+  output_format: classification
+  confidence_threshold: 0.5
+  position_awareness: true
+  filters:
+    min_signal_separation: 4
+
+training:
+  labels:
+    source: triple_barrier
+    pt_multiplier: 2.0
+    sl_multiplier: 1.5
+    max_holding_period: 50
+    vol_span: 50
+    vol_method: atr
+  loss: focal
+  focal_gamma: 2.0
+  epochs: 200
+  learning_rate: 0.001
+  batch_size: 64
+  gradient_clip: 1.0
+  lr_scheduler:
+    type: reduce_on_plateau
+    factor: 0.5
+    patience: 5
+  early_stopping:
+    patience: 20
+    min_delta: 0.001
