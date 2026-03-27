@@ -26,7 +26,7 @@ BT_END="${5:-2025-01-01}"
 
 SHARED_STRATEGIES="${HOME}/.ktrdr/shared/strategies"
 POLL_INTERVAL=30  # seconds between status polls
-MAX_POLL_ATTEMPTS=240  # 240 * 30s = 2 hours max
+STALL_TIMEOUT=900  # 15 minutes with no progress change = stalled
 TMPDIR="${TMPDIR:-/tmp}"
 TRAIN_RESULT_FILE=$(mktemp "${TMPDIR}/squad-train-XXXXXX.json")
 BT_RESULT_FILE=$(mktemp "${TMPDIR}/squad-bt-XXXXXX.json")
@@ -44,32 +44,42 @@ strategy_name() {
 }
 
 # Poll an operation until it reaches a terminal state.
-# Returns the final status JSON on stdout.
+# Detects stalls: if progress doesn't change for STALL_TIMEOUT seconds, abort.
+# No fixed timeout — training can take as long as it needs if making progress.
 poll_operation() {
     local op_id="$1"
-    local attempt=0
+    local last_progress="-1"
+    local last_progress_time
+    last_progress_time=$(date +%s)
 
-    while (( attempt < MAX_POLL_ATTEMPTS )); do
+    while true; do
         local status_json
-        status_json=$(uv run ktrdr --json status "$op_id" 2>/dev/null) || true
+        local raw_output
+        raw_output=$(uv run ktrdr --json status "$op_id" 2>/dev/null) || true
+        status_json=$(echo "$raw_output" | grep -E '^\{' | tail -1) || true
 
         if [ -z "$status_json" ]; then
-            log "Poll $attempt: no response for $op_id, retrying..."
+            log "Poll: no response for $op_id, retrying..."
             sleep "$POLL_INTERVAL"
-            (( attempt++ )) || true
             continue
         fi
 
-        local status
-        status=$(echo "$status_json" | python3 -c "
+        # Parse status and progress
+        local status progress
+        read -r status progress < <(echo "$status_json" | python3 -c "
 import sys, json
 data = json.load(sys.stdin)
-# Handle both direct status and nested operation status
 if isinstance(data, dict):
-    print(data.get('status', data.get('operation', {}).get('status', 'unknown')))
+    status = data.get('status', data.get('operation', {}).get('status', 'unknown'))
+    progress = data.get('progress', data.get('operation', {}).get('progress', {}))
+    if isinstance(progress, dict):
+        pct = progress.get('percentage', 0)
+    else:
+        pct = progress or 0
+    print(f'{status} {pct}')
 else:
-    print('unknown')
-" 2>/dev/null) || status="unknown"
+    print('unknown 0')
+" 2>/dev/null) || { status="unknown"; progress="0"; }
 
         case "$status" in
             completed|success)
@@ -83,14 +93,27 @@ else:
                 return 1
                 ;;
             *)
-                log "Poll $attempt: $op_id status=$status"
+                # Check for stall: has progress changed?
+                if [ "$progress" != "$last_progress" ]; then
+                    last_progress="$progress"
+                    last_progress_time=$(date +%s)
+                fi
+
+                local now
+                now=$(date +%s)
+                local stall_duration=$(( now - last_progress_time ))
+
+                if (( stall_duration >= STALL_TIMEOUT )); then
+                    log "Operation $op_id STALLED: progress stuck at ${progress}% for ${stall_duration}s"
+                    echo "$status_json"
+                    return 1
+                fi
+
+                log "Poll: $op_id status=$status progress=${progress}% (last change ${stall_duration}s ago)"
                 sleep "$POLL_INTERVAL"
-                (( attempt++ )) || true
                 ;;
         esac
     done
-
-    die "Operation $op_id timed out after $MAX_POLL_ATTEMPTS polls"
 }
 
 # Extract operation ID from ktrdr train/backtest output.
@@ -126,10 +149,12 @@ log "Starting experiment: $NAME"
 log "Training: $TRAIN_START to $TRAIN_END"
 log "Backtest: $BT_START to $BT_END"
 
-# Step 1: Copy strategy YAML to shared directory
+# Step 1: Copy strategy YAML to shared directory (skip if already there)
 mkdir -p "$SHARED_STRATEGIES"
-cp "$STRATEGY_YAML" "$SHARED_STRATEGIES/${NAME}.yaml"
-log "Strategy written to $SHARED_STRATEGIES/${NAME}.yaml"
+if [ "$(realpath "$STRATEGY_YAML" 2>/dev/null)" != "$(realpath "$SHARED_STRATEGIES/${NAME}.yaml" 2>/dev/null)" ]; then
+    cp "$STRATEGY_YAML" "$SHARED_STRATEGIES/${NAME}.yaml"
+fi
+log "Strategy at $SHARED_STRATEGIES/${NAME}.yaml"
 
 # Step 2: Start training (fire-and-forget)
 log "Starting training..."

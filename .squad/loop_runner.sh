@@ -274,7 +274,7 @@ And the Scribe's state updates:
 PROMPT
 }
 
-# Extract strategy YAML from Claude output
+# Extract strategy YAML from Claude output (first document only if multi-doc)
 extract_strategy_yaml() {
     local output="$1"
     echo "$output" | python3 -c "
@@ -282,7 +282,18 @@ import sys, re
 text = sys.stdin.read()
 m = re.search(r'# SQUAD_EXPERIMENT_SPEC\n(.*?)(?:\n\`\`\`|\Z)', text, re.DOTALL)
 if m:
-    print(m.group(1).strip())
+    yaml_text = m.group(1).strip()
+    # If multi-document YAML (contains ---), take only the first document
+    if '\n---\n' in yaml_text:
+        yaml_text = yaml_text.split('\n---\n')[0].strip()
+    # Also strip any trailing comments that aren't valid YAML
+    lines = []
+    for line in yaml_text.split('\n'):
+        # Stop at lines that look like execution instructions, not YAML
+        if line.startswith('# --- ') and ('CONTROL' in line or 'EXECUTION' in line or 'SUCCESS' in line):
+            break
+        lines.append(line)
+    print('\n'.join(lines).strip())
 "
 }
 
@@ -453,51 +464,71 @@ while should_continue "$ITERATION"; do
         continue
     fi
 
-    # --- PHASE 1: Squad Discussion (ORIENT → STRATEGIZE → DESIGN) ---
+    # --- CHECK FOR PENDING EXPERIMENT (resume after executor failure) ---
 
-    PROMPT=$(build_cycle_prompt "$CYCLE_NUM" "$CADENCE")
+    PENDING_STRATEGY=""
+    PENDING_NAME=""
+    CURRENT_EXP="$SHARED_DIR/loop/current-experiment.md"
 
-    log "Invoking Claude for squad discussion..."
-    CLAUDE_OUTPUT=$("$CLAUDE_BIN" -p \
-        --model opus \
-        --allowedTools "Agent Read Glob Grep Write Edit Bash WebSearch WebFetch" \
-        --permission-mode auto \
-        "$PROMPT" 2>>"$CYCLE_LOG") || {
-        log "Claude session failed for cycle $CYCLE_NUM discussion phase"
-        cat "$CYCLE_LOG" >&2
-        echo "Discussion phase failed" > "$SHARED_DIR/loop/fatal-error.md"
-        break
-    }
+    if [ -f "$CURRENT_EXP" ] && grep -q "^\\*\\*Strategy:\\*\\*" "$CURRENT_EXP"; then
+        PENDING_STRATEGY=$(grep "^\\*\\*Strategy:\\*\\*" "$CURRENT_EXP" | sed 's/.*\*\*Strategy:\*\* //')
+        PENDING_NAME=$(grep "^\\*\\*Name:\\*\\*" "$CURRENT_EXP" | sed 's/.*\*\*Name:\*\* //')
 
-    # Save full output for debugging
-    echo "$CLAUDE_OUTPUT" > "$LOG_DIR/cycle_${CYCLE_NUM}_discussion.md"
-
-    # Extract strategy YAML
-    STRATEGY_YAML=$(extract_strategy_yaml "$CLAUDE_OUTPUT")
-    if [ -z "$STRATEGY_YAML" ]; then
-        log "WARNING: No strategy YAML extracted from cycle $CYCLE_NUM"
-        log "Check $LOG_DIR/cycle_${CYCLE_NUM}_discussion.md for details"
-        # Try to continue — maybe the squad decided not to run an experiment
-        increment_iteration
-        ITERATION=$(get_iteration)
-        continue
+        if [ -n "$PENDING_STRATEGY" ] && [ -f "$PENDING_STRATEGY" ]; then
+            log "RESUMING pending experiment: $PENDING_NAME ($PENDING_STRATEGY)"
+            log "Skipping discussion — experiment was already designed"
+            EXPERIMENT_NAME="$PENDING_NAME"
+            STRATEGY_FILE="$PENDING_STRATEGY"
+        else
+            PENDING_STRATEGY=""  # File doesn't exist, run normal discussion
+        fi
     fi
 
-    # Determine experiment name from YAML
-    EXPERIMENT_NAME=$(echo "$STRATEGY_YAML" | grep "^name:" | head -1 | sed 's/name:\s*//' | tr -d '"'"'" | tr -d '[:space:]')
-    if [ -z "$EXPERIMENT_NAME" ]; then
-        EXPERIMENT_NAME="squad_cycle${CYCLE_NUM}"
-    fi
-    log "Experiment: $EXPERIMENT_NAME"
+    # --- PHASE 1: Squad Discussion (only if no pending experiment) ---
 
-    # Write strategy file
-    STRATEGY_FILE="$STRATEGIES_DIR/${EXPERIMENT_NAME}.yaml"
-    mkdir -p "$STRATEGIES_DIR"
-    echo "$STRATEGY_YAML" > "$STRATEGY_FILE"
-    log "Strategy written to $STRATEGY_FILE"
+    if [ -z "$PENDING_STRATEGY" ]; then
+        PROMPT=$(build_cycle_prompt "$CYCLE_NUM" "$CADENCE")
 
-    # Update current experiment
-    cat > "$SHARED_DIR/loop/current-experiment.md" <<EOF
+        log "Invoking Claude for squad discussion..."
+        CLAUDE_OUTPUT=$("$CLAUDE_BIN" -p \
+            --model opus \
+            --allowedTools "Agent Read Glob Grep Write Edit Bash WebSearch WebFetch" \
+            --permission-mode auto \
+            "$PROMPT" 2>>"$CYCLE_LOG") || {
+            log "Claude session failed for cycle $CYCLE_NUM discussion phase"
+            cat "$CYCLE_LOG" >&2
+            echo "Discussion phase failed" > "$SHARED_DIR/loop/fatal-error.md"
+            break
+        }
+
+        # Save full output for debugging
+        echo "$CLAUDE_OUTPUT" > "$LOG_DIR/cycle_${CYCLE_NUM}_discussion.md"
+
+        # Extract strategy YAML
+        STRATEGY_YAML=$(extract_strategy_yaml "$CLAUDE_OUTPUT")
+        if [ -z "$STRATEGY_YAML" ]; then
+            log "WARNING: No strategy YAML extracted from cycle $CYCLE_NUM"
+            log "Check $LOG_DIR/cycle_${CYCLE_NUM}_discussion.md for details"
+            increment_iteration
+            ITERATION=$(get_iteration)
+            continue
+        fi
+
+        # Determine experiment name from YAML
+        EXPERIMENT_NAME=$(echo "$STRATEGY_YAML" | grep "^name:" | head -1 | sed 's/name:\s*//' | tr -d '"'"'" | tr -d '[:space:]')
+        if [ -z "$EXPERIMENT_NAME" ]; then
+            EXPERIMENT_NAME="squad_cycle${CYCLE_NUM}"
+        fi
+        log "Experiment: $EXPERIMENT_NAME"
+
+        # Write strategy file
+        STRATEGY_FILE="$STRATEGIES_DIR/${EXPERIMENT_NAME}.yaml"
+        mkdir -p "$STRATEGIES_DIR"
+        echo "$STRATEGY_YAML" > "$STRATEGY_FILE"
+        log "Strategy written to $STRATEGY_FILE"
+
+        # Update current experiment
+        cat > "$SHARED_DIR/loop/current-experiment.md" <<EOF
 # Current Experiment
 
 **Cycle:** $CYCLE_NUM
@@ -505,6 +536,7 @@ while should_continue "$ITERATION"; do
 **Started:** $(timestamp)
 **Strategy:** $STRATEGY_FILE
 EOF
+    fi
 
     # --- PHASE 2: Execute Experiment ---
 
