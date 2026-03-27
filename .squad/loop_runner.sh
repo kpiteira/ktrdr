@@ -229,48 +229,42 @@ The experiment "$experiment_name" has completed. Results are below.
 $(cat "$results_file")
 
 ## Instructions
-1. Load the squad-coordinator skill (.claude/skills/squad-coordinator/SKILL.md)
-2. Resume the Critic agent — evaluate results using tiered framework (Tier 1 mandatory)
-3. Resume the Quant agent — assess tradability
-4. Spawn the Scribe — record everything
+1. Spawn the Critic agent — evaluate results using tiered framework (Tier 1 mandatory). Give the Critic its charter (.squad/agents/critic/charter.md), history (~/.ktrdr/shared/squad/agents/critic/history.md), and the results above.
+2. Spawn the Quant agent — assess tradability. Give the Quant its charter, history, and the results + Critic evaluation.
+3. Spawn the Scribe agent — record everything.
 
-Key paths:
-- Agent histories: ~/.ktrdr/shared/squad/agents/{role}/history.md
-- Knowledge base: ~/.ktrdr/shared/squad/knowledge/
-- Last result: ~/.ktrdr/shared/squad/loop/last-result.md
+## CRITICAL: Write State Updates Directly to Files
 
-## Output Requirements
+After the agents have spoken, YOU (the Coordinator) must update the knowledge base files directly using the Edit tool. Do NOT output structured blocks for parsing — write to the files yourself.
 
-Output the cadence decision:
-\`\`\`
-# SQUAD_CADENCE
-cadence: full_squad|quick_iteration|synthesis|pause
-reason: one line explanation
-\`\`\`
+**Files to update (all in ~/.ktrdr/shared/squad/):**
 
-And the Scribe's state updates:
-\`\`\`markdown
-# SQUAD_STATE_UPDATES
+1. **knowledge/experiments.md** — APPEND a new entry at the end for this cycle. Include: experiment name, date, hypothesis, setup, results table, assessment, verdict.
 
-## EXPERIMENT_ENTRY
-(new entry for experiments.md — include full metrics)
+2. **knowledge/hypotheses.md** — APPEND any new hypotheses or status changes at the end.
 
-## HYPOTHESIS_UPDATES
-(changes to hypotheses.md)
+3. **knowledge/decisions.md** — APPEND any new decisions (D-numbered) at the end. Only if this cycle established something new.
 
-## DECISION_UPDATES
-(new decisions, if any)
+4. **knowledge/frontiers.md** — UPDATE frontier statuses if the Director's assessment changed them.
 
-## FRONTIER_UPDATES
-(changes to frontiers.md, if any)
+5. **agents/{role}/history.md** — APPEND a "## Cycle $cycle_num" section to each participating agent's history with 1-3 sentences of what they learned.
 
-## AGENT_HISTORIES
-### director
-(learning)
-### inventor
-(learning)
-... (all participating agents)
-\`\`\`
+6. **loop/last-result.md** — OVERWRITE with this cycle's result summary.
+
+7. **loop/cadence.md** — OVERWRITE with the cadence decision for the next cycle:
+   \`\`\`
+   # Cadence
+
+   cadence: full_squad|quick_iteration|synthesis|pause
+   reason: one line explanation
+   updated: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
+   \`\`\`
+
+**Rules:**
+- APPEND means add to the end of the file. Never overwrite existing content in experiments.md, hypotheses.md, decisions.md, or history.md.
+- Read each file first before editing so you know what's already there.
+- Use the Edit tool (not Write) for append operations to avoid clobbering.
+- If you can't update a file for any reason, log what you would have written so it's not lost.
 PROMPT
 }
 
@@ -297,104 +291,12 @@ if m:
 "
 }
 
-# Extract cadence from Claude output
-extract_cadence() {
-    local output="$1"
-    echo "$output" | python3 -c "
-import sys, re
-text = sys.stdin.read()
-m = re.search(r'# SQUAD_CADENCE\n.*?cadence:\s*(full_squad|quick_iteration|synthesis|pause)', text)
-if m:
-    print(m.group(1))
-"
-}
+# (Cadence is now written directly by Claude to ~/.ktrdr/shared/squad/loop/cadence.md)
 
-# Extract state updates section from Claude output
-extract_state_updates() {
-    local output="$1"
-    echo "$output" | python3 -c "
-import sys, re
-text = sys.stdin.read()
-m = re.search(r'# SQUAD_STATE_UPDATES\n(.*?)(?:\n\`\`\`|\Z)', text, re.DOTALL)
-if m:
-    print(m.group(1).strip())
-"
-}
+# (State updates are now written directly by Claude during the evaluate phase.
+#  No parsing or applying needed — Claude uses Edit/Write tools on the files.)
 
-# Apply state updates to knowledge base files
-apply_state_updates() {
-    local updates="$1"
-    local cycle_num=$2
-
-    # Use Python to parse sections and write updates
-    echo "$updates" | python3 -c "
-import sys, re, os
-
-text = sys.stdin.read()
-shared = os.environ.get('SHARED_DIR', os.path.expanduser('~/.ktrdr/shared/squad'))
-cycle = int(os.environ.get('CYCLE_NUM', '$cycle_num'))
-
-def extract_section(name):
-    pattern = rf'^## {name}\n(.*?)(?=\n## [A-Z]|\Z)'
-    m = re.search(pattern, text, re.MULTILINE | re.DOTALL)
-    return m.group(1).strip() if m else ''
-
-# Experiment entry — append
-exp = extract_section('EXPERIMENT_ENTRY')
-if exp:
-    with open(f'{shared}/knowledge/experiments.md', 'a') as f:
-        f.write(f'\n\n---\n\n{exp}\n')
-    print('Updated experiments.md', file=sys.stderr)
-
-# Hypothesis updates — append
-hyp = extract_section('HYPOTHESIS_UPDATES')
-if hyp:
-    with open(f'{shared}/knowledge/hypotheses.md', 'a') as f:
-        f.write(f'\n\n<!-- Cycle {cycle} updates -->\n{hyp}\n')
-    print('Updated hypotheses.md', file=sys.stderr)
-
-# Decision updates — append
-dec = extract_section('DECISION_UPDATES')
-if dec:
-    with open(f'{shared}/knowledge/decisions.md', 'a') as f:
-        f.write(f'\n\n{dec}\n')
-    print('Updated decisions.md', file=sys.stderr)
-
-# Frontier updates — replace (not append)
-front = extract_section('FRONTIER_UPDATES')
-if front:
-    with open(f'{shared}/knowledge/frontiers.md', 'w') as f:
-        f.write(front + '\n')
-    print('Updated frontiers.md', file=sys.stderr)
-
-# Agent histories — append per agent
-agents_section = extract_section('AGENT_HISTORIES')
-if agents_section:
-    for agent in ['director','inventor','quant','engineer','critic','architect','scout','scribe']:
-        pattern = rf'^### {agent}\n(.*?)(?=\n### [a-z]|\Z)'
-        m = re.search(pattern, agents_section, re.MULTILINE | re.DOTALL)
-        if m and m.group(1).strip():
-            hist_file = f'{shared}/agents/{agent}/history.md'
-            with open(hist_file, 'a') as f:
-                f.write(f'\n\n## Cycle {cycle}\n{m.group(1).strip()}\n')
-    print('Updated agent histories', file=sys.stderr)
-" SHARED_DIR="$SHARED_DIR" CYCLE_NUM="$cycle_num"
-
-    log "State updates applied"
-}
-
-# Write cadence file
-write_cadence() {
-    local cadence=$1
-    local reason=${2:-""}
-    cat > "$SHARED_DIR/loop/cadence.md" <<EOF
-# Cadence
-
-cadence: $cadence
-reason: $reason
-updated: $(timestamp)
-EOF
-}
+# (Cadence file is now written directly by Claude during evaluate phase)
 
 # ---------- preflight ----------
 
@@ -446,17 +348,8 @@ while should_continue "$ITERATION"; do
             continue
         }
 
-        # Apply state updates from synthesis
-        STATE_UPDATES=$(extract_state_updates "$CLAUDE_OUTPUT")
-        if [ -n "$STATE_UPDATES" ]; then
-            apply_state_updates "$STATE_UPDATES" "$CYCLE_NUM"
-        fi
-
-        # Extract and write cadence
-        NEW_CADENCE=$(extract_cadence "$CLAUDE_OUTPUT")
-        if [ -n "$NEW_CADENCE" ]; then
-            write_cadence "$NEW_CADENCE" "Post-synthesis"
-        fi
+        # State updates and cadence are written directly by Claude during synthesis
+        log "Synthesis state updates written by Claude"
 
         increment_iteration
         ITERATION=$(get_iteration)
@@ -577,52 +470,20 @@ EOF
     # Save eval output
     echo "$EVAL_OUTPUT" > "$LOG_DIR/cycle_${CYCLE_NUM}_evaluate.md"
 
-    # --- PHASE 4: Apply State Updates ---
+    # --- PHASE 4: Verify State Updates ---
+    # Claude wrote directly to the knowledge base files during evaluate.
+    # Just verify key files were modified.
 
-    STATE_UPDATES=$(extract_state_updates "$EVAL_OUTPUT")
-    if [ -n "$STATE_UPDATES" ]; then
-        apply_state_updates "$STATE_UPDATES" "$CYCLE_NUM"
+    EXPERIMENTS_MOD=$(stat -f %m "$SHARED_DIR/knowledge/experiments.md" 2>/dev/null || echo "0")
+    if [ "$EXPERIMENTS_MOD" -gt "$(($(date +%s) - 300))" ] 2>/dev/null; then
+        log "State updates verified: experiments.md was recently modified"
     else
-        log "WARNING: No state updates extracted from evaluate phase"
+        log "WARNING: experiments.md was NOT updated during evaluate phase"
     fi
 
-    # Extract and write cadence for next cycle
-    NEW_CADENCE=$(extract_cadence "$EVAL_OUTPUT")
-    if [ -n "$NEW_CADENCE" ]; then
-        CADENCE_REASON=$(echo "$EVAL_OUTPUT" | grep -A1 "# SQUAD_CADENCE" | grep "reason:" | sed 's/.*reason:\s*//')
-        write_cadence "$NEW_CADENCE" "$CADENCE_REASON"
-        log "Next cycle cadence: $NEW_CADENCE"
-    fi
-
-    # Write last result summary
-    cat > "$SHARED_DIR/loop/last-result.md" <<EOF
-# Last Result
-
-## Cycle $CYCLE_NUM — $EXPERIMENT_NAME
-
-**Date:** $(timestamp)
-**Strategy:** $STRATEGY_FILE
-**Results file:** $RESULTS_FILE
-
-$(cat "$RESULTS_FILE" | python3 -c "
-import json, sys
-try:
-    data = json.load(sys.stdin)
-    if 'error' in data:
-        print(f'**Status:** FAILED — {data[\"error\"]}')
-    elif 'dry_run' in data:
-        print('**Status:** DRY RUN — no execution')
-    else:
-        bt = data.get('backtest', {}).get('result', {})
-        metrics = bt.get('result_summary', bt).get('metrics', {})
-        print(f'**Trades:** {metrics.get(\"total_trades\", \"?\")}')
-        print(f'**Win Rate:** {metrics.get(\"win_rate\", \"?\"):.1%}' if isinstance(metrics.get('win_rate'), (int, float)) else f'**Win Rate:** {metrics.get(\"win_rate\", \"?\")}')
-        print(f'**Sharpe:** {metrics.get(\"sharpe_ratio\", \"?\")}')
-        print(f'**Total Return:** {metrics.get(\"total_return_pct\", \"?\"):.2%}' if isinstance(metrics.get('total_return_pct'), (int, float)) else f'**Total Return:** {metrics.get(\"total_return_pct\", \"?\")}')
-except Exception as e:
-    print(f'**Status:** Could not parse results — {e}')
-" 2>/dev/null)
-EOF
+    # Read cadence from file (Claude should have written it)
+    NEW_CADENCE=$(get_cadence)
+    log "Next cycle cadence: $NEW_CADENCE"
 
     # Clear current experiment
     echo "# Current Experiment" > "$SHARED_DIR/loop/current-experiment.md"
