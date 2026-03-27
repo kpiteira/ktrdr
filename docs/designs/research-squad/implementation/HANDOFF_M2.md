@@ -50,10 +50,31 @@ The Engineer agent generates strategies that ktrdr rejects. Common issues:
 - 11+ agent history entries per agent
 - Frontiers evolved: F0 (execution infra), F1 (label quality), F2 (feature enrichment), F3 (cost-aware training)
 
+## Critical Fix: Strategy YAML Validation (blocks everything)
+
+The squad designs strategies that ktrdr rejects ~66% of the time. The fix has two parts:
+
+### 1. Engineer must validate its own output
+The Engineer charter needs updating:
+- Reference the v3 strategy grammar spec (`.claude/skills/strategy-grammar-v3/SKILL.md`)
+- After generating YAML, the Engineer agent should call `ktrdr strategies validate <name>` itself
+- If validation fails, fix the YAML before submitting — don't pass broken specs to the executor
+- Engineers embody precision. The current charter says "no missing fields" but doesn't enforce it.
+
+### 2. Executor pre-training validation
+Add `uv run ktrdr strategies validate "$NAME"` in executor.sh before `ktrdr train`. If validation fails, return a structured error with the validation message so the squad can fix it. This is a 5-line change.
+
+### 3. `ktrdr strategies validate` exists and works
+This command has been available the whole time. We just never wired it in. The executor and the Engineer agent should both use it.
+
 ## Next Steps (to complete M2)
-1. Add strategy validation step in executor
-2. Tighten Engineer prompt with working YAML template
-3. Run 5 clean cycles (short training) with both fixes
-4. If 4+ cycles produce data, run 5 full cycles (6-year training)
+1. Update Engineer charter — must validate YAML with `ktrdr strategies validate`
+2. Add validation step in executor.sh (5 lines)
+3. Run 3 short validation cycles (6-month training) — expect 3/3 to produce data
+4. Run 5 full cycles (6-year training) — prove compounding
 5. ke2e test design and execution
 6. PR and merge
+
+## How to Resume
+Run `/kbuild research-squad/M2` — it will read this handoff, see Tasks 2.1-2.3 done, and continue with 2.4.
+The branch is `impl/research-squad-M2-loop`, pushed to origin.
