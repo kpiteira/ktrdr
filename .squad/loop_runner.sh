@@ -44,8 +44,8 @@ RESUME=false
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SQUAD_DIR="$REPO_ROOT/.squad"
-SHARED_DIR="$HOME/.ktrdr/shared/squad"
-STRATEGIES_DIR="$HOME/.ktrdr/shared/strategies"
+SHARED_DIR="${SQUAD_SHARED_DIR:-$HOME/.ktrdr/shared/squad}"
+STRATEGIES_DIR="${SQUAD_STRATEGIES_DIR:-$HOME/.ktrdr/shared/strategies}"
 LOG_DIR="$REPO_ROOT/logs/squad"
 CLAUDE_BIN="${CLAUDE_BIN:-claude}"
 
@@ -139,14 +139,16 @@ You are the Coordinator of a trading research squad. Run one complete research c
 ## Instructions
 Load the squad-coordinator skill and execute one cycle. The skill is at .claude/skills/squad-coordinator/SKILL.md.
 
+**IMPORTANT:** The skill's templates reference \`~/.ktrdr/shared/squad/\` as the default shared directory. In this session, use the paths below instead — they override the skill's defaults. Wherever the skill says \`~/.ktrdr/shared/squad/\`, substitute \`$SHARED_DIR/\`.
+
 Key paths:
 - Charters: .squad/agents/{role}/charter.md (repo)
-- Knowledge base: ~/.ktrdr/shared/squad/knowledge/ (shared)
-- Agent histories: ~/.ktrdr/shared/squad/agents/{role}/history.md (shared)
-- Scout files: ~/.ktrdr/shared/squad/agents/scout/{bibliography,reading-queue}.md
-- External insights: ~/.ktrdr/shared/squad/roadmap/external-insights.md
-- Loop state: ~/.ktrdr/shared/squad/loop/ (shared)
-- Nudges: ~/.ktrdr/shared/squad/loop/nudges.md (human feedback — read first!)
+- Knowledge base: $SHARED_DIR/knowledge/ (shared)
+- Agent histories: $SHARED_DIR/agents/{role}/history.md (shared)
+- Scout files: $SHARED_DIR/agents/scout/{bibliography,reading-queue}.md
+- External insights: $SHARED_DIR/roadmap/external-insights.md
+- Loop state: $SHARED_DIR/loop/ (shared)
+- Nudges: $SHARED_DIR/loop/nudges.md (human feedback — read first!)
 
 ## Cycle Mode: $cadence
 $(if [ "$cadence" = "full_squad" ]; then
@@ -231,7 +233,7 @@ The experiment "$experiment_name" has completed. Results are below.
 $(cat "$results_file")
 
 ## Instructions
-1. Spawn the Critic agent — evaluate results using tiered framework (Tier 1 mandatory). Give the Critic its charter (.squad/agents/critic/charter.md), history (~/.ktrdr/shared/squad/agents/critic/history.md), and the results above.
+1. Spawn the Critic agent — evaluate results using tiered framework (Tier 1 mandatory). Give the Critic its charter (.squad/agents/critic/charter.md), history ($SHARED_DIR/agents/critic/history.md), and the results above.
 2. Spawn the Quant agent — assess tradability. Give the Quant its charter, history, and the results + Critic evaluation.
 3. Spawn the Scribe agent — record everything.
 
@@ -239,7 +241,7 @@ $(cat "$results_file")
 
 After the agents have spoken, YOU (the Coordinator) must update the knowledge base files directly using the Edit tool. Do NOT output structured blocks for parsing — write to the files yourself.
 
-**Files to update (all in ~/.ktrdr/shared/squad/):**
+**Files to update (all in $SHARED_DIR/):**
 
 1. **knowledge/experiments.md** — APPEND a new entry at the end for this cycle. Include: experiment name, date, hypothesis, setup, results table, assessment, verdict.
 
@@ -295,7 +297,7 @@ if m:
 "
 }
 
-# (Cadence is now written directly by Claude to ~/.ktrdr/shared/squad/loop/cadence.md)
+# (Cadence is now written directly by Claude to $SHARED_DIR/loop/cadence.md)
 
 # (State updates are now written directly by Claude during the evaluate phase.
 #  No parsing or applying needed — Claude uses Edit/Write tools on the files.)
@@ -342,7 +344,7 @@ while should_continue "$ITERATION"; do
         PROMPT=$(build_cycle_prompt "$CYCLE_NUM" "$CADENCE")
 
         # Write prompt to temp file to avoid ARG_MAX limit
-        SYNTH_PROMPT_FILE=$(mktemp "${TMPDIR:-/tmp}/squad-synth-prompt-XXXXXX.md")
+        SYNTH_PROMPT_FILE=$(mktemp "${TMPDIR:-/tmp}/squad-synth-prompt-XXXXXX")
         echo "$PROMPT" > "$SYNTH_PROMPT_FILE"
 
         log "Invoking Claude for synthesis session..."
@@ -393,7 +395,7 @@ while should_continue "$ITERATION"; do
         PROMPT=$(build_cycle_prompt "$CYCLE_NUM" "$CADENCE")
 
         # Write prompt to temp file to avoid ARG_MAX limit
-        DISCUSS_PROMPT_FILE=$(mktemp "${TMPDIR:-/tmp}/squad-discuss-prompt-XXXXXX.md")
+        DISCUSS_PROMPT_FILE=$(mktemp "${TMPDIR:-/tmp}/squad-discuss-prompt-XXXXXX")
         echo "$PROMPT" > "$DISCUSS_PROMPT_FILE"
 
         log "Invoking Claude for squad discussion..."
@@ -483,7 +485,7 @@ EOF
     EVAL_PROMPT=$(build_evaluate_prompt "$CYCLE_NUM" "$EXPERIMENT_NAME" "$RESULTS_FILE")
 
     # Write prompt to temp file to avoid ARG_MAX limit (results JSON can be large)
-    EVAL_PROMPT_FILE=$(mktemp "${TMPDIR:-/tmp}/squad-eval-prompt-XXXXXX.md")
+    EVAL_PROMPT_FILE=$(mktemp "${TMPDIR:-/tmp}/squad-eval-prompt-XXXXXX")
     echo "$EVAL_PROMPT" > "$EVAL_PROMPT_FILE"
 
     log "Invoking Claude for evaluate + learn..."
