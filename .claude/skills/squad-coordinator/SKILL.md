@@ -105,27 +105,67 @@ You are the Scout of a trading research squad.
 ## Current Frontiers
 [Insert: ~/.ktrdr/shared/squad/knowledge/frontiers.md content]
 
+## Current External Insights
+[Insert: ~/.ktrdr/shared/squad/roadmap/external-insights.md content — if file does not exist, treat as empty]
+
 ## Bibliography
 [Insert: ~/.ktrdr/shared/squad/agents/scout/bibliography.md content]
+
+## Reading Queue
+[Insert: ~/.ktrdr/shared/squad/agents/scout/reading-queue.md content]
 
 ## Components (what we have)
 [Insert: ~/.ktrdr/shared/squad/knowledge/components.md content]
 
 ## Your Task (STRATEGIZE)
 
-Search for external research relevant to the squad's current frontiers and knowledge gaps. Focus on:
-- Techniques that could improve our temporal signal models (LSTM found signal at 61% val, not profitable)
-- Cross-asset feature integration for FX
-- Alternative labeling methods beyond triple barrier
-- Position sizing and exit optimization for FX
+You MUST perform real web searches using the WebSearch tool. Do NOT rely on your training knowledge — the whole point of your role is to bring in information the squad doesn't already have.
 
-For each finding, provide: source, relevance, key finding, actionable implication, quality rating (high/medium/low).
+**Step 1: Search.** For each active frontier, call WebSearch with a specific query. Example queries:
+- "GRU vs LSTM forex prediction 2024 2025"
+- "attention mechanism time series trading"
+- "optimal sequence length recurrent networks financial data"
+
+Run at least 3 WebSearch calls targeting different frontiers or knowledge gaps.
+
+**Step 2: Read.** For the most promising search results, use WebFetch to read the actual page and extract specific findings, methodology details, and results.
+
+**Step 3: Synthesize.** Produce structured insights based on what you found. Every insight MUST include a real URL from your search results.
 
 If no specific frontiers are set yet, search based on the squad's established decisions and capability gaps.
+
+**IMPORTANT:** Do not write insights based on papers you "know about" but didn't search for in this session. If you cannot find a source via WebSearch, do not include it. The value of your role is live research, not recalled knowledge.
+
+## CRITICAL: Persist Your Findings to Disk
+
+After completing your research, you MUST write your findings to these files:
+
+1. **~/.ktrdr/shared/squad/roadmap/external-insights.md** — READ the existing file first, then WRITE the updated version. Carry forward all existing entries and their statuses (especially CITED and TESTED — the evaluate phase sets these). Add your new findings with status NEW. Mark entries SUPERSEDED only if you found newer/better research that replaces them. Use this format:
+   ```
+   # External Insights
+
+   Actionable findings from external research. Updated each cycle by the Scout.
+   Last updated: [cycle number and date]
+
+   ## [Finding Title]
+   - **Source:** [title and full URL, e.g. https://arxiv.org/abs/2506.06840]
+   - **Relevance:** [which frontier/hypothesis this relates to]
+   - **Key Finding:** [1-2 sentences]
+   - **Actionable Implication:** [what the squad should do with this]
+   - **Quality:** HIGH/MEDIUM/LOW
+   - **Status:** NEW / CITED / TESTED / SUPERSEDED
+   ```
+   Every NEW entry MUST have a real URL. No URL = not a valid insight. Preserve existing entries' URLs and statuses.
+
+2. **~/.ktrdr/shared/squad/agents/scout/bibliography.md** — APPEND new sources to the existing bibliography. Each entry MUST include a URL. Do not remove existing entries.
+
+3. **~/.ktrdr/shared/squad/agents/scout/reading-queue.md** — OVERWRITE with topics to investigate next cycle, driven by current frontiers and gaps discovered during this search.
+
+Read each file before writing to preserve existing content where needed (bibliography).
 ```
 
-**Tools:** The Scout agent should have access to WebSearch and WebFetch.
-**Collect:** Scout's findings → `scout_findings`
+**Tools:** The Scout agent MUST have access to `WebSearch`, `WebFetch`, `Read`, `Write`, and `Edit`.
+**Collect:** Scout's findings → `scout_findings` (also persisted to disk files above)
 
 #### 2b. Director
 
@@ -141,8 +181,11 @@ You are the Director of a trading research squad.
 ## Scribe's Briefing
 [Insert: scribe_briefing]
 
-## Scout's Findings
+## Scout's Findings (This Cycle)
 [Insert: scout_findings]
+
+## External Insights (Accumulated)
+[Insert: ~/.ktrdr/shared/squad/roadmap/external-insights.md content]
 
 ## Current Frontiers
 [Insert: ~/.ktrdr/shared/squad/knowledge/frontiers.md content]
@@ -152,7 +195,7 @@ You are the Director of a trading research squad.
 
 ## Your Task (STRATEGIZE)
 
-Based on the Scribe's briefing and Scout's findings, propose the next exploration frontier:
+Based on the Scribe's briefing, Scout's findings, and accumulated external insights, propose the next exploration frontier:
 1. What research direction should we pursue?
 2. Why is this the highest-value use of the squad's time?
 3. What specific question should this cycle's experiment answer?
@@ -177,15 +220,18 @@ You are the Inventor of a trading research squad.
 ## Director's Proposal
 [Insert: director_proposal]
 
-## Scout's Findings
+## Scout's Findings (This Cycle)
 [Insert: scout_findings]
+
+## External Insights (Accumulated)
+[Insert: ~/.ktrdr/shared/squad/roadmap/external-insights.md content]
 
 ## Components (what we have)
 [Insert: ~/.ktrdr/shared/squad/knowledge/components.md content]
 
 ## Your Task (STRATEGIZE)
 
-The Director has proposed a frontier. Your job: propose a specific, novel experiment within that frontier. Push for something the squad wouldn't reach through incremental reasoning.
+The Director has proposed a frontier. Your job: propose a specific, novel experiment within that frontier. Push for something the squad wouldn't reach through incremental reasoning. Consider external insights from the Scout — if a paper or technique is relevant, incorporate it.
 
 Requirements:
 1. Describe a specific experiment (architecture, features, hypothesis)
@@ -325,9 +371,12 @@ You are the Architect of a trading research squad.
 ## Capability Gaps
 [Insert: ~/.ktrdr/shared/squad/roadmap/capability-gaps.md content]
 
+## External Insights (capability-relevant)
+[Insert: ~/.ktrdr/shared/squad/roadmap/external-insights.md content]
+
 ## Your Task (DESIGN)
 
-Assess feasibility:
+Assess feasibility (including any new capabilities referenced in external insights):
 1. Can we run this experiment with current ktrdr capabilities?
 2. If not, what's missing? How hard is it to build?
 3. Are there workarounds using existing components?
@@ -411,6 +460,9 @@ You are the Scribe of a trading research squad.
 
 ## Full Cycle Output
 
+### Scout's Findings
+[Insert: scout_findings]
+
 ### Director's Frontier
 [Insert: director_proposal]
 
@@ -456,6 +508,14 @@ Any new components to add to components.md, or existing entries to update.
 
 ### 5. Decision Updates (if any)
 Any new architectural decisions established by this experiment's results.
+
+### 6. External Insight Influence (if any)
+Which Scout findings (from external-insights.md) influenced this cycle's experiment design? For each, note:
+- The insight title/source
+- How it influenced the design (directly tested, inspired approach, informed parameters)
+- Status update: CITED (referenced but not directly tested) or TESTED (this experiment directly tested the insight)
+
+If no Scout findings influenced the design, state "No external insights influenced this cycle."
 ```
 
 **Collect:** Scribe's state updates → apply to disk files
@@ -470,10 +530,11 @@ The Coordinator writes all state updates to `~/.ktrdr/shared/squad/`:
 3. Appends to each agent's `~/.ktrdr/shared/squad/agents/{role}/history.md`
 4. Updates `~/.ktrdr/shared/squad/knowledge/components.md` if new components
 5. Updates `~/.ktrdr/shared/squad/knowledge/decisions.md` if new decisions
-6. Writes experiment results to `~/.ktrdr/shared/squad/loop/last-result.md`
-7. Clears `~/.ktrdr/shared/squad/loop/current-experiment.md`
-8. Increments `~/.ktrdr/shared/squad/loop/iteration-count.txt`
-9. Reports cycle summary to the user
+6. Updates `~/.ktrdr/shared/squad/roadmap/external-insights.md` insight statuses (NEW → CITED/TESTED)
+7. Writes experiment results to `~/.ktrdr/shared/squad/loop/last-result.md`
+8. Clears `~/.ktrdr/shared/squad/loop/current-experiment.md`
+9. Increments `~/.ktrdr/shared/squad/loop/iteration-count.txt`
+10. Reports cycle summary to the user
 
 ---
 
@@ -484,7 +545,7 @@ The Coordinator writes all state updates to `~/.ktrdr/shared/squad/`:
 - **Context is selective** — each agent sees only what its phase requires (see templates above)
 - **Critic and Quant persist across STRATEGIZE → EVALUATE** via SendMessage
 - **Scribe gets fresh sessions** for ORIENT and LEARN (different context needs)
-- **Scout has access to WebSearch and WebFetch** tools
+- **Scout has access to WebSearch, WebFetch, Read, Write, and Edit** tools (searches + persists findings to disk)
 
 ---
 
