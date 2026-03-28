@@ -337,16 +337,22 @@ while should_continue "$ITERATION"; do
         log "Synthesis cycle — no experiment execution"
         PROMPT=$(build_cycle_prompt "$CYCLE_NUM" "$CADENCE")
 
+        # Write prompt to temp file to avoid ARG_MAX limit
+        SYNTH_PROMPT_FILE=$(mktemp "${TMPDIR:-/tmp}/squad-synth-prompt-XXXXXX.md")
+        echo "$PROMPT" > "$SYNTH_PROMPT_FILE"
+
         log "Invoking Claude for synthesis session..."
-        CLAUDE_OUTPUT=$("$CLAUDE_BIN" -p \
+        CLAUDE_OUTPUT=$(cat "$SYNTH_PROMPT_FILE" | "$CLAUDE_BIN" -p \
             --model opus \
             --allowedTools "Agent Read Glob Grep Write Edit Bash WebSearch WebFetch" \
             --permission-mode auto \
-            "$PROMPT" 2>>"$CYCLE_LOG") || {
+            2>>"$CYCLE_LOG") || {
             log "Claude session failed for synthesis cycle $CYCLE_NUM"
+            rm -f "$SYNTH_PROMPT_FILE"
             cat "$CYCLE_LOG" >&2
             continue
         }
+        rm -f "$SYNTH_PROMPT_FILE"
 
         # State updates and cadence are written directly by Claude during synthesis
         log "Synthesis state updates written by Claude"
@@ -382,17 +388,23 @@ while should_continue "$ITERATION"; do
     if [ -z "$PENDING_STRATEGY" ]; then
         PROMPT=$(build_cycle_prompt "$CYCLE_NUM" "$CADENCE")
 
+        # Write prompt to temp file to avoid ARG_MAX limit
+        DISCUSS_PROMPT_FILE=$(mktemp "${TMPDIR:-/tmp}/squad-discuss-prompt-XXXXXX.md")
+        echo "$PROMPT" > "$DISCUSS_PROMPT_FILE"
+
         log "Invoking Claude for squad discussion..."
-        CLAUDE_OUTPUT=$("$CLAUDE_BIN" -p \
+        CLAUDE_OUTPUT=$(cat "$DISCUSS_PROMPT_FILE" | "$CLAUDE_BIN" -p \
             --model opus \
             --allowedTools "Agent Read Glob Grep Write Edit Bash WebSearch WebFetch" \
             --permission-mode auto \
-            "$PROMPT" 2>>"$CYCLE_LOG") || {
+            2>>"$CYCLE_LOG") || {
             log "Claude session failed for cycle $CYCLE_NUM discussion phase"
+            rm -f "$DISCUSS_PROMPT_FILE"
             cat "$CYCLE_LOG" >&2
             echo "Discussion phase failed" > "$SHARED_DIR/loop/fatal-error.md"
             break
         }
+        rm -f "$DISCUSS_PROMPT_FILE"
 
         # Save full output for debugging
         echo "$CLAUDE_OUTPUT" > "$LOG_DIR/cycle_${CYCLE_NUM}_discussion.md"
@@ -402,6 +414,15 @@ while should_continue "$ITERATION"; do
         if [ -z "$STRATEGY_YAML" ]; then
             log "WARNING: No strategy YAML extracted from cycle $CYCLE_NUM"
             log "Check $LOG_DIR/cycle_${CYCLE_NUM}_discussion.md for details"
+            increment_iteration
+            ITERATION=$(get_iteration)
+            continue
+        fi
+
+        # Reject non-v3 strategies (manual analysis protocols, diagnostic specs, etc.)
+        if ! echo "$STRATEGY_YAML" | grep -q '^version:.*3\.0'; then
+            log "WARNING: Cycle $CYCLE_NUM produced non-v3 strategy (missing version: 3.0). Skipping."
+            log "The squad must produce executable v3 strategy YAMLs, not manual analysis protocols."
             increment_iteration
             ITERATION=$(get_iteration)
             continue
@@ -457,15 +478,20 @@ EOF
 
     EVAL_PROMPT=$(build_evaluate_prompt "$CYCLE_NUM" "$EXPERIMENT_NAME" "$RESULTS_FILE")
 
+    # Write prompt to temp file to avoid ARG_MAX limit (results JSON can be large)
+    EVAL_PROMPT_FILE=$(mktemp "${TMPDIR:-/tmp}/squad-eval-prompt-XXXXXX.md")
+    echo "$EVAL_PROMPT" > "$EVAL_PROMPT_FILE"
+
     log "Invoking Claude for evaluate + learn..."
-    EVAL_OUTPUT=$("$CLAUDE_BIN" -p \
+    EVAL_OUTPUT=$(cat "$EVAL_PROMPT_FILE" | "$CLAUDE_BIN" -p \
         --model opus \
         --allowedTools "Agent Read Glob Grep Write Edit Bash" \
         --permission-mode auto \
-        "$EVAL_PROMPT" 2>>"$CYCLE_LOG") || {
+        2>>"$CYCLE_LOG") || {
         log "Claude session failed for cycle $CYCLE_NUM evaluate phase"
         # Don't fatal — we still have results, just missing evaluation
     }
+    rm -f "$EVAL_PROMPT_FILE"
 
     # Save eval output
     echo "$EVAL_OUTPUT" > "$LOG_DIR/cycle_${CYCLE_NUM}_evaluate.md"

@@ -1,0 +1,184 @@
+# =============================================================================
+# SQUAD CYCLE 14 — FEATURE ABLATION TOURNAMENT, ARM A (MOMENTUM)
+# =============================================================================
+# Part 1 of 3-arm ablation experiment (F2-audit: Feature Information Audit).
+# Arms B (volatility-structure) and C (full baseline) follow in C15/C16.
+#
+# Hypothesis: Momentum features (RSI, MACD, ROC, ADX) alone carry sufficient
+#   directional signal for the LSTM to produce positive OOS expectancy on
+#   EURUSD 1h. If Arm A outperforms Arm B, momentum is the primary signal
+#   carrier. If both underperform Arm C, features are complementary.
+#
+# Arm A features: RSI(14), MACD(12,26,9), ROC(10), ADX(14)
+# Encoding: Gaussian fuzzy MFs (D4) + raw normalized values (hybrid)
+# Architecture: LSTM, single-layer, hidden=28 to respect D16 budget
+#
+# D16 param budget: ~35K bars, max 5833 params
+#   LSTM layer: 4 * (18 + 28 + 1) * 28 = 5264
+#   Output: 28 * 3 + 3 = 87
+#   Total: ~5351 (within budget)
+#
+# D17: Single-variable isolation — only features differ across arms.
+#   Architecture, labels, data, training config are identical.
+#
+# Critic validations:
+#   D26: Minimum 200 trades or inconclusive
+#   D27: All arms worse than -3 pips = upstream failure
+#   D28: Arm ranking stable across temporal halves
+#   V1: Feature list locked (RSI, MACD, ROC, ADX — hash at analysis time)
+#   V2-V4: Identical data/labels/architecture across arms
+#
+# Train: 2015-01-01 to 2020-12-31 | OOS backtest: 2021-01-01 to 2025-01-01
+# =============================================================================
+
+name: squad_c14_ablation_momentum
+version: "3.0"
+description: >
+  Cycle 14 — Feature Ablation Tournament Arm A (Momentum). Tests whether
+  momentum indicators alone (RSI, MACD, ROC, ADX) carry sufficient directional
+  signal for positive OOS expectancy. Part of 3-arm ablation design where only
+  the feature set varies. Arms B (volatility-structure) and C (union baseline)
+  follow in subsequent cycles. Small LSTM (hidden=28, 1 layer) to respect D16
+  params:samples budget on ~35K bars.
+
+training_data:
+  symbols:
+    mode: single
+    symbol: EURUSD
+  timeframes:
+    mode: single
+    list: ["1h"]
+    base_timeframe: "1h"
+  date_range:
+    start: "2015-01-01"
+    end: "2020-12-31"
+  history_required: 100
+
+indicators:
+  rsi_14:
+    type: rsi
+    period: 14
+  macd_12_26_9:
+    type: macd
+    fast_period: 12
+    slow_period: 26
+    signal_period: 9
+  roc_10:
+    type: roc
+    period: 10
+  adx_14:
+    type: adx
+    period: 14
+
+fuzzy_sets:
+  rsi_momentum:
+    indicator: rsi_14
+    oversold:
+      type: gaussian
+      parameters: [25, 12]
+    low:
+      type: gaussian
+      parameters: [35, 10]
+    neutral:
+      type: gaussian
+      parameters: [50, 10]
+    high:
+      type: gaussian
+      parameters: [65, 10]
+    overbought:
+      type: gaussian
+      parameters: [75, 12]
+
+  macd_signal:
+    indicator: macd_12_26_9.line
+    bearish:
+      type: gaussian
+      parameters: [-0.002, 0.002]
+    neutral:
+      type: gaussian
+      parameters: [0, 0.0012]
+    bullish:
+      type: gaussian
+      parameters: [0.002, 0.002]
+
+  adx_strength:
+    indicator: adx_14.adx
+    weak:
+      type: gaussian
+      parameters: [12, 8]
+    moderate:
+      type: gaussian
+      parameters: [28, 10]
+    strong:
+      type: gaussian
+      parameters: [45, 12]
+
+  roc_direction:
+    indicator: roc_10
+    falling:
+      type: gaussian
+      parameters: [-0.4, 0.3]
+    flat:
+      type: gaussian
+      parameters: [0, 0.2]
+    rising:
+      type: gaussian
+      parameters: [0.4, 0.3]
+
+nn_inputs:
+  # Fuzzy features (hybrid encoding per D4)
+  - fuzzy_set: rsi_momentum
+    timeframes: all
+  - fuzzy_set: macd_signal
+    timeframes: all
+  - fuzzy_set: adx_strength
+    timeframes: all
+  - fuzzy_set: roc_direction
+    timeframes: all
+  # Raw normalized features
+  - raw_indicator: rsi_14
+    timeframes: all
+    normalization: minmax
+  - raw_indicator: macd_12_26_9.line
+    timeframes: all
+    normalization: zscore
+  - raw_indicator: adx_14.adx
+    timeframes: all
+    normalization: minmax
+  - raw_indicator: roc_10
+    timeframes: all
+    normalization: zscore
+
+model:
+  type: lstm
+  architecture:
+    sequence_length: 20
+    hidden_size: 28
+    num_layers: 1
+    dropout: 0.2
+
+decisions:
+  output_format: classification
+  confidence_threshold: 0.5
+  position_awareness: true
+  filters:
+    min_signal_separation: 4
+
+training:
+  labels:
+    source: zigzag
+    zigzag_threshold: 0.006
+    label_lookahead: 20
+  loss: focal
+  focal_gamma: 2.0
+  epochs: 200
+  learning_rate: 0.001
+  batch_size: 64
+  gradient_clip: 1.0
+  lr_scheduler:
+    type: step
+    step_size: 50
+    gamma: 0.5
+  early_stopping:
+    patience: 20
+    min_delta: 0.001

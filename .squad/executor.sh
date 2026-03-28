@@ -156,7 +156,16 @@ if [ "$(realpath "$STRATEGY_YAML" 2>/dev/null)" != "$(realpath "$SHARED_STRATEGI
 fi
 log "Strategy at $SHARED_STRATEGIES/${NAME}.yaml"
 
-# Step 2: Start training (fire-and-forget)
+# Step 2: Validate strategy YAML before training
+log "Validating strategy..."
+VALIDATE_OUTPUT=$(uv run ktrdr validate "$NAME" 2>&1) || {
+    log "Strategy validation FAILED: $NAME"
+    echo "{\"error\": \"validation_failed\", \"strategy\": \"$NAME\", \"output\": $(echo "$VALIDATE_OUTPUT" | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read()))')}"
+    exit 1
+}
+log "Strategy valid: $NAME"
+
+# Step 3: Start training (fire-and-forget)
 log "Starting training..."
 TRAIN_OUTPUT=$(uv run ktrdr --json train "$NAME" --start "$TRAIN_START" --end "$TRAIN_END" 2>&1) || {
     log "Training command failed"
@@ -167,7 +176,7 @@ TRAIN_OUTPUT=$(uv run ktrdr --json train "$NAME" --start "$TRAIN_START" --end "$
 TRAIN_OP_ID=$(extract_op_id "$TRAIN_OUTPUT")
 log "Training started: operation=$TRAIN_OP_ID"
 
-# Step 3: Poll training until complete
+# Step 4: Poll training until complete
 log "Polling training status..."
 poll_operation "$TRAIN_OP_ID" > "$TRAIN_RESULT_FILE" || {
     log "Training failed"
@@ -180,7 +189,7 @@ print(json.dumps({'error': 'training_failed', 'operation_id': '$TRAIN_OP_ID', 'o
 }
 log "Training complete"
 
-# Step 4: Extract model path from training result
+# Step 5: Extract model path from training result
 MODEL_PATH=$(python3 -c "
 import sys, json
 data = json.load(open('$TRAIN_RESULT_FILE'))
@@ -195,7 +204,7 @@ print('models/$NAME/latest')
 
 log "Model path: $MODEL_PATH"
 
-# Step 5: Start backtest
+# Step 6: Start backtest
 log "Starting backtest..."
 BT_CMD=(uv run ktrdr --json backtest "$NAME" --start "$BT_START" --end "$BT_END")
 if [ -n "$MODEL_PATH" ] && [ "$MODEL_PATH" != "models/${NAME}/latest" ]; then
@@ -211,7 +220,7 @@ BT_OUTPUT=$("${BT_CMD[@]}" 2>&1) || {
 BT_OP_ID=$(extract_op_id "$BT_OUTPUT")
 log "Backtest started: operation=$BT_OP_ID"
 
-# Step 6: Poll backtest until complete
+# Step 7: Poll backtest until complete
 log "Polling backtest status..."
 poll_operation "$BT_OP_ID" > "$BT_RESULT_FILE" || {
     log "Backtest failed"
@@ -224,7 +233,7 @@ print(json.dumps({'error': 'backtest_failed', 'operation_id': '$BT_OP_ID', 'outp
 }
 log "Backtest complete"
 
-# Step 7: Assemble structured results
+# Step 8: Assemble structured results
 python3 -c "
 import json
 
