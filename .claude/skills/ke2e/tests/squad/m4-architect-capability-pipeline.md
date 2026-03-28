@@ -128,7 +128,7 @@ fi
 
 # Check for Architect's feasibility verdict
 HAS_VERDICT=false
-grep -Eqi "GO|MODIFY|BLOCKED|feasib|verdict" "$DISCUSSION_LOG" && HAS_VERDICT=true
+grep -Eqi "\b(GO|MODIFY|BLOCKED)\b|feasib|verdict" "$DISCUSSION_LOG" && HAS_VERDICT=true
 
 if [ "$HAS_VERDICT" = true ]; then
   echo "OK: Discussion log contains feasibility verdict"
