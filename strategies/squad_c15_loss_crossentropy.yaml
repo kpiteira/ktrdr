@@ -1,0 +1,170 @@
+# =============================================================================
+# SQUAD CYCLE 15 — LOSS FUNCTION SENSITIVITY (FOCAL → CROSS_ENTROPY)
+# =============================================================================
+# Tests whether focal loss (gamma=2.0), used since C1, actively improves
+# classification vs standard cross_entropy. C8 baseline uses focal — this
+# removes it to measure its contribution.
+#
+# Hypothesis: Focal loss has been a constant since C1 but never isolated.
+#   If cross_entropy produces similar OOS results, focal is inert overhead.
+#   If OOS degrades, focal is earning its place.
+#
+# Baseline: C8 config (same as C13 with confidence_threshold=0.5)
+# Change from baseline: loss focal+gamma=2.0 → cross_entropy (ONLY change)
+#
+# Pre-registered thresholds (per Critic):
+#   Within $5/trade of C8 (-$18.77) = focal inert
+#   >$5/trade worse = focal active (keep it)
+#   >$10/trade worse = focal critical
+#
+# Train: 2015-01-01 to 2020-12-31 | OOS backtest: 2021-01-01 to 2025-01-01
+# =============================================================================
+
+name: squad_c15_loss_crossentropy
+version: "3.0"
+description: >
+  Cycle 15 — Loss function sensitivity test. Removes focal loss (gamma=2.0),
+  used since C1, and replaces with standard cross_entropy. Same model
+  architecture, features, labels, and training config as C8. Tests whether
+  focal loss is actively improving hard-sample classification or is inert.
+
+training_data:
+  symbols:
+    mode: single
+    symbol: EURUSD
+  timeframes:
+    mode: multi_timeframe
+    list: ["5m", "1h"]
+    base_timeframe: "1h"
+  date_range:
+    start: "2015-01-01"
+    end: "2020-12-31"
+  history_required: 100
+
+indicators:
+  rsi_14:
+    type: rsi
+    period: 14
+  macd_12_26_9:
+    type: macd
+    fast_period: 12
+    slow_period: 26
+    signal_period: 9
+  adx_14:
+    type: adx
+    period: 14
+  roc_10:
+    type: roc
+    period: 10
+
+fuzzy_sets:
+  rsi_momentum:
+    indicator: rsi_14
+    oversold:
+      type: gaussian
+      parameters: [25, 12]
+    low:
+      type: gaussian
+      parameters: [35, 10]
+    neutral:
+      type: gaussian
+      parameters: [50, 10]
+    high:
+      type: gaussian
+      parameters: [65, 10]
+    overbought:
+      type: gaussian
+      parameters: [75, 12]
+
+  macd_signal:
+    indicator: macd_12_26_9.line
+    bearish:
+      type: gaussian
+      parameters: [-0.002, 0.002]
+    neutral:
+      type: gaussian
+      parameters: [0, 0.0012]
+    bullish:
+      type: gaussian
+      parameters: [0.002, 0.002]
+
+  adx_strength:
+    indicator: adx_14.adx
+    weak:
+      type: gaussian
+      parameters: [12, 8]
+    moderate:
+      type: gaussian
+      parameters: [28, 10]
+    strong:
+      type: gaussian
+      parameters: [45, 12]
+
+  roc_direction:
+    indicator: roc_10
+    falling:
+      type: gaussian
+      parameters: [-0.4, 0.3]
+    flat:
+      type: gaussian
+      parameters: [0, 0.2]
+    rising:
+      type: gaussian
+      parameters: [0.4, 0.3]
+
+nn_inputs:
+  # Fuzzy features (hybrid encoding)
+  - fuzzy_set: rsi_momentum
+    timeframes: all
+  - fuzzy_set: macd_signal
+    timeframes: all
+  - fuzzy_set: adx_strength
+    timeframes: all
+  - fuzzy_set: roc_direction
+    timeframes: all
+  # Raw normalized features
+  - raw_indicator: rsi_14
+    timeframes: all
+    normalization: minmax
+  - raw_indicator: macd_12_26_9.line
+    timeframes: all
+    normalization: zscore
+  - raw_indicator: adx_14.adx
+    timeframes: all
+    normalization: minmax
+  - raw_indicator: roc_10
+    timeframes: all
+    normalization: zscore
+
+model:
+  type: lstm
+  architecture:
+    sequence_length: 20
+    hidden_size: 64
+    num_layers: 2
+    dropout: 0.3
+
+decisions:
+  output_format: classification
+  confidence_threshold: 0.5
+  position_awareness: true
+  filters:
+    min_signal_separation: 4
+
+training:
+  labels:
+    source: zigzag
+    zigzag_threshold: 0.005
+    label_lookahead: 20
+  loss: cross_entropy
+  epochs: 200
+  learning_rate: 0.001
+  batch_size: 64
+  gradient_clip: 1.0
+  lr_scheduler:
+    type: step
+    step_size: 50
+    gamma: 0.5
+  early_stopping:
+    patience: 20
+    min_delta: 0.001

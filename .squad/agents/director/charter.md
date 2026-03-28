@@ -27,7 +27,18 @@ You speak after the Scribe's briefing and Scout's findings. You propose, then li
 
 ## Output Format
 
-Your output is a **frontier proposal**: what research direction to pursue next, why it's the highest-value use of the squad's time, and what specific question this cycle's experiment should answer. Include your assessment of which frontiers are active, which are exhausted, and which are unexplored.
+Your output includes two parts:
+
+**1. Frontier proposal:** What research direction to pursue next, why it's the highest-value use of the squad's time, and what specific question this cycle's experiment should answer. Include your assessment of which frontiers are active, which are exhausted, and which are unexplored.
+
+**2. Cadence decision for the NEXT cycle:** After seeing the squad's debate and experiment design, signal what mode the next cycle should use:
+
+- **full_squad** — Convene all agents. Use when: changing frontiers, after significant results, first few cycles, or when synthesis reveals new patterns.
+- **quick_iteration** — Skip ORIENT and STRATEGIZE, go straight to DESIGN. Use when: exploring within an established frontier, the last experiment suggested a clear next variant, no strategic pivot needed.
+- **synthesis** — No experiment. Scribe presents macro patterns, full squad reviews, you recalibrate frontiers. Use when: 5+ experiments since last synthesis, diminishing returns detected, or accumulated results warrant stepping back.
+- **pause** — Stop the loop. Use when: human review needed, a breakthrough requires manual verification, or the squad is stuck and needs external input.
+
+Include your cadence decision with a one-line reason.
 
 ## Failure Mode Prevented
 

@@ -1,0 +1,173 @@
+# =============================================================================
+# SQUAD CYCLE 13 — CONFIDENCE SELECTIVITY (F1.5)
+# =============================================================================
+# Tests whether raising confidence_threshold filters out low-conviction
+# noise trades, improving profit factor on the C8 architecture.
+#
+# Hypothesis: C8's 31% win rate across 77 trades is diluted by marginal-
+#   confidence signals. At confidence_threshold=0.7, the model only trades
+#   when it puts 70%+ probability mass on one class. This should improve
+#   per-trade edge at the cost of reduced trade count.
+#
+# Baseline: C8/C10 with confidence_threshold=0.5 (72% val, -3% OOS,
+#   77 trades, 31% WR). Reproducible per D19.
+#
+# Change from baseline: confidence_threshold 0.5 → 0.7 (ONLY change)
+#
+# Pre-registered decision rule:
+#   - PF > 1.3 net of 2.5 pip costs with 30+ trades = directional signal
+#   - PF < 1.3 = abandon C8 architecture (per Quant assessment)
+#
+# Train: 2015-01-01 to 2020-12-31 | OOS backtest: 2021-01-01 to 2025-01-01
+# =============================================================================
+
+name: squad_c13_high_confidence
+version: "3.0"
+description: >
+  Cycle 13 — Confidence selectivity test. Raises confidence_threshold from
+  0.5 (C8 baseline) to 0.7 to filter low-conviction trades. Same model
+  architecture, features, labels, and training config as C8. Tests whether
+  the LSTM has exploitable directional skill buried under marginal signals,
+  or whether the 31% win rate reflects fundamental model weakness.
+
+training_data:
+  symbols:
+    mode: single
+    symbol: EURUSD
+  timeframes:
+    mode: multi_timeframe
+    list: ["5m", "1h"]
+    base_timeframe: "1h"
+  date_range:
+    start: "2015-01-01"
+    end: "2020-12-31"
+  history_required: 100
+
+indicators:
+  rsi_14:
+    type: rsi
+    period: 14
+  macd_12_26_9:
+    type: macd
+    fast_period: 12
+    slow_period: 26
+    signal_period: 9
+  adx_14:
+    type: adx
+    period: 14
+  roc_10:
+    type: roc
+    period: 10
+
+fuzzy_sets:
+  rsi_momentum:
+    indicator: rsi_14
+    oversold:
+      type: gaussian
+      parameters: [25, 12]
+    low:
+      type: gaussian
+      parameters: [35, 10]
+    neutral:
+      type: gaussian
+      parameters: [50, 10]
+    high:
+      type: gaussian
+      parameters: [65, 10]
+    overbought:
+      type: gaussian
+      parameters: [75, 12]
+
+  macd_signal:
+    indicator: macd_12_26_9.line
+    bearish:
+      type: gaussian
+      parameters: [-0.002, 0.002]
+    neutral:
+      type: gaussian
+      parameters: [0, 0.0012]
+    bullish:
+      type: gaussian
+      parameters: [0.002, 0.002]
+
+  adx_strength:
+    indicator: adx_14.adx
+    weak:
+      type: gaussian
+      parameters: [12, 8]
+    moderate:
+      type: gaussian
+      parameters: [28, 10]
+    strong:
+      type: gaussian
+      parameters: [45, 12]
+
+  roc_direction:
+    indicator: roc_10
+    falling:
+      type: gaussian
+      parameters: [-0.4, 0.3]
+    flat:
+      type: gaussian
+      parameters: [0, 0.2]
+    rising:
+      type: gaussian
+      parameters: [0.4, 0.3]
+
+nn_inputs:
+  # Fuzzy features (hybrid encoding)
+  - fuzzy_set: rsi_momentum
+    timeframes: all
+  - fuzzy_set: macd_signal
+    timeframes: all
+  - fuzzy_set: adx_strength
+    timeframes: all
+  - fuzzy_set: roc_direction
+    timeframes: all
+  # Raw normalized features
+  - raw_indicator: rsi_14
+    timeframes: all
+    normalization: minmax
+  - raw_indicator: macd_12_26_9.line
+    timeframes: all
+    normalization: zscore
+  - raw_indicator: adx_14.adx
+    timeframes: all
+    normalization: minmax
+  - raw_indicator: roc_10
+    timeframes: all
+    normalization: zscore
+
+model:
+  type: lstm
+  architecture:
+    sequence_length: 20
+    hidden_size: 64
+    num_layers: 2
+    dropout: 0.3
+
+decisions:
+  output_format: classification
+  confidence_threshold: 0.7
+  position_awareness: true
+  filters:
+    min_signal_separation: 4
+
+training:
+  labels:
+    source: zigzag
+    zigzag_threshold: 0.005
+    label_lookahead: 20
+  loss: focal
+  focal_gamma: 2.0
+  epochs: 200
+  learning_rate: 0.001
+  batch_size: 64
+  gradient_clip: 1.0
+  lr_scheduler:
+    type: step
+    step_size: 50
+    gamma: 0.5
+  early_stopping:
+    patience: 20
+    min_delta: 0.001
