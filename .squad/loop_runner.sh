@@ -147,8 +147,23 @@ Key paths:
 - Agent histories: $SHARED_DIR/agents/{role}/history.md (shared)
 - Scout files: $SHARED_DIR/agents/scout/{bibliography,reading-queue}.md
 - External insights: $SHARED_DIR/roadmap/external-insights.md
+- Capability gaps: $SHARED_DIR/roadmap/capability-gaps.md
+- Build queue: $SHARED_DIR/roadmap/build-queue.md
 - Loop state: $SHARED_DIR/loop/ (shared)
 - Nudges: $SHARED_DIR/loop/nudges.md (human feedback — read first!)
+
+## Newly Resolved Capabilities
+$(if [ -f "$SHARED_DIR/loop/newly-resolved-issues.txt" ]; then
+    echo "The following capability gaps have been resolved since the last cycle (GitHub issues closed):"
+    echo ""
+    while IFS='|' read -r num title; do
+        echo "- **#$num**: $title"
+    done < "$SHARED_DIR/loop/newly-resolved-issues.txt"
+    echo ""
+    echo "The Architect should mark these as RESOLVED in capability-gaps.md and the Scribe should update components.md with the new capabilities."
+else
+    echo "No new capabilities resolved since last cycle."
+fi)
 
 ## Cycle Mode: $cadence
 $(if [ "$cadence" = "full_squad" ]; then
@@ -255,9 +270,15 @@ After the agents have spoken, YOU (the Coordinator) must update the knowledge ba
 
 6. **roadmap/external-insights.md** — UPDATE insight statuses: mark any insight that influenced this experiment's design as CITED (if referenced) or TESTED (if directly tested). Leave other statuses unchanged. If the file doesn't exist or is empty, skip.
 
-7. **loop/last-result.md** — OVERWRITE with this cycle's result summary.
+7. **roadmap/capability-gaps.md** — If the Architect filed new gaps during DESIGN, verify they were persisted. If any capabilities were newly resolved (check \`$SHARED_DIR/loop/newly-resolved-issues.txt\`), mark the corresponding GAP entries as RESOLVED.
 
-8. **loop/cadence.md** — OVERWRITE with the cadence decision for the next cycle:
+8. **roadmap/build-queue.md** — UPDATE status for any resolved issues (OPEN → RESOLVED). Add any new entries from the Architect.
+
+9. **knowledge/components.md** — If any capabilities were resolved, add the new capability to the appropriate section.
+
+10. **loop/last-result.md** — OVERWRITE with this cycle's result summary.
+
+11. **loop/cadence.md** — OVERWRITE with the cadence decision for the next cycle:
    \`\`\`
    # Cadence
 
@@ -320,6 +341,84 @@ command -v "$CLAUDE_BIN" >/dev/null || die "claude CLI not found"
 # Create log directory
 mkdir -p "$LOG_DIR"
 
+# Ensure GitHub labels exist for squad capability issues
+ensure_squad_labels() {
+    if command -v gh >/dev/null 2>&1; then
+        gh label create "squad:architect" --description "Capability gap identified by Research Squad Architect" --color "7057ff" 2>/dev/null || true
+        gh label create "capability-gap" --description "Missing capability blocking squad experiments" --color "d4c5f9" 2>/dev/null || true
+        log "GitHub labels verified"
+    else
+        log "WARNING: gh CLI not found — GitHub issue creation will be skipped"
+    fi
+}
+
+# Check for recently closed squad:architect issues and update knowledge base
+check_resolved_capabilities() {
+    if ! command -v gh >/dev/null 2>&1; then
+        return 0
+    fi
+
+    local gaps_file="$SHARED_DIR/roadmap/capability-gaps.md"
+    local build_queue="$SHARED_DIR/roadmap/build-queue.md"
+    local components_file="$SHARED_DIR/knowledge/components.md"
+    local resolved_count=0
+
+    # Find closed issues with squad:architect label (closed in last 30 days)
+    local closed_issues
+    closed_issues=$(gh issue list --label "squad:architect" --state closed --json number,title,closedAt --limit 50 2>/dev/null) || return 0
+
+    if [ -z "$closed_issues" ] || [ "$closed_issues" = "[]" ]; then
+        return 0
+    fi
+
+    # For each closed issue, check if it's already marked RESOLVED in capability-gaps.md
+    echo "$closed_issues" | python3 -c "
+import sys, json, re
+
+issues = json.load(sys.stdin)
+if not issues:
+    sys.exit(0)
+
+# Read current gaps file
+gaps_path = '$gaps_file'
+try:
+    with open(gaps_path, 'r') as f:
+        gaps_content = f.read()
+except FileNotFoundError:
+    sys.exit(0)
+
+resolved = []
+for issue in issues:
+    num = issue['number']
+    title = issue['title']
+    # Check if this issue number is already marked RESOLVED
+    if f'#{num}' in gaps_content and 'RESOLVED' in gaps_content.split(f'#{num}')[0].split('###')[-1]:
+        continue
+    # Check if this issue number appears in gaps at all
+    if f'#{num}' in gaps_content:
+        resolved.append({'number': num, 'title': title})
+
+# Output resolved issue numbers for the shell to process
+for r in resolved:
+    print(f\"{r['number']}|{r['title']}\")
+" | while IFS='|' read -r issue_num issue_title; do
+        log "Resolved capability: #$issue_num — $issue_title"
+        resolved_count=$((resolved_count + 1))
+
+        # Note: The actual file updates (marking RESOLVED in capability-gaps.md,
+        # updating build-queue.md status, adding to components.md) are done by
+        # the Claude evaluate phase, which has Edit/Write tools. We just log here
+        # so the cycle prompt can include the notification.
+        echo "$issue_num|$issue_title" >> "$SHARED_DIR/loop/newly-resolved-issues.txt"
+    done
+
+    if [ "$resolved_count" -gt 0 ]; then
+        log "Found $resolved_count newly resolved capability issues"
+    fi
+}
+
+ensure_squad_labels
+
 # ---------- main loop ----------
 
 ITERATION=$(get_iteration)
@@ -333,6 +432,10 @@ while should_continue "$ITERATION"; do
     log "=========================================="
     log "CYCLE $CYCLE_NUM starting"
     log "=========================================="
+
+    # Check for resolved capabilities before each cycle
+    rm -f "$SHARED_DIR/loop/newly-resolved-issues.txt"
+    check_resolved_capabilities
 
     # Determine cadence
     CADENCE=$(get_cadence)
