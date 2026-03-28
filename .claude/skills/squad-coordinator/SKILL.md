@@ -360,7 +360,7 @@ Output the YAML in a ```yaml code block so it can be extracted.
 ```
 You are the Architect of a trading research squad.
 
-[Insert: ~/.ktrdr/shared/squad/agents/architect/charter.md content]
+[Insert: .squad/agents/architect/charter.md content]
 
 ## Your History
 [Insert: ~/.ktrdr/shared/squad/agents/architect/history.md content]
@@ -368,23 +368,42 @@ You are the Architect of a trading research squad.
 ## Engineer's Specification
 [Insert: engineer_spec]
 
-## Capability Gaps
+## Available Components
+[Insert: ~/.ktrdr/shared/squad/knowledge/components.md content]
+
+## Capability Gaps (current)
 [Insert: ~/.ktrdr/shared/squad/roadmap/capability-gaps.md content]
+
+## Build Queue (current)
+[Insert: ~/.ktrdr/shared/squad/roadmap/build-queue.md content]
 
 ## External Insights (capability-relevant)
 [Insert: ~/.ktrdr/shared/squad/roadmap/external-insights.md content]
 
 ## Your Task (DESIGN)
 
-Assess feasibility (including any new capabilities referenced in external insights):
-1. Can we run this experiment with current ktrdr capabilities?
-2. If not, what's missing? How hard is it to build?
-3. Are there workarounds using existing components?
-4. If capability gaps exist, specify them with enough detail for a GitHub issue
+Assess feasibility of the Engineer's specification:
 
-Output a clear feasibility verdict: GO (run as-is), MODIFY (run with specified changes), or BLOCKED (cannot run, here's what's needed).
+1. Can we run this experiment with current ktrdr capabilities? Check components.md against the spec's requirements.
+2. Run a params:samples ratio check — flag overparameterized models.
+3. Verify the experiment type is supported by the executor (training + backtest only).
+4. If gaps exist, produce structured GAP-NNN entries (see your charter for the format).
+5. If BLOCKED or MODIFY, propose a fallback experiment using only available components.
+
+Output your feasibility verdict: **GO** (run as-is), **MODIFY** (run with specified changes), or **BLOCKED** (cannot run, here's what's needed).
+
+## CRITICAL: Persist to Disk
+
+After your assessment, you MUST update these files using the Write or Edit tool:
+
+1. **~/.ktrdr/shared/squad/roadmap/capability-gaps.md** — READ first, then add new gaps or update existing gap statuses (OPEN → RESOLVED). Use the structured GAP-NNN format from your charter. Never remove entries — mark resolved ones as RESOLVED.
+
+2. **~/.ktrdr/shared/squad/roadmap/build-queue.md** — If your verdict is BLOCKED or MODIFY due to a gap, add a one-line entry: `| GAP-NNN | [description] | OPEN | [date] | — |`
+
+Read each file before writing to preserve existing content.
 ```
 
+**Tools:** The Architect agent MUST have access to `Read`, `Write`, `Edit`, and `Bash` (for `gh issue create`).
 **Collect:** Architect's assessment → `architect_assessment`
 
 **Decision point:** If BLOCKED, the Coordinator asks the Engineer to redesign using available components. If MODIFY, apply the modifications. If GO, proceed to EXECUTE.
@@ -528,13 +547,15 @@ The Coordinator writes all state updates to `~/.ktrdr/shared/squad/`:
 1. Appends the new experiment entry to `~/.ktrdr/shared/squad/knowledge/experiments.md`
 2. Updates `~/.ktrdr/shared/squad/knowledge/hypotheses.md` with status changes and new hypotheses
 3. Appends to each agent's `~/.ktrdr/shared/squad/agents/{role}/history.md`
-4. Updates `~/.ktrdr/shared/squad/knowledge/components.md` if new components
+4. Updates `~/.ktrdr/shared/squad/knowledge/components.md` if new components (or if resolved capabilities arrived)
 5. Updates `~/.ktrdr/shared/squad/knowledge/decisions.md` if new decisions
 6. Updates `~/.ktrdr/shared/squad/roadmap/external-insights.md` insight statuses (NEW → CITED/TESTED)
-7. Writes experiment results to `~/.ktrdr/shared/squad/loop/last-result.md`
-8. Clears `~/.ktrdr/shared/squad/loop/current-experiment.md`
-9. Increments `~/.ktrdr/shared/squad/loop/iteration-count.txt`
-10. Reports cycle summary to the user
+7. Updates `~/.ktrdr/shared/squad/roadmap/capability-gaps.md` — new gaps from Architect, resolved gaps from closed issues
+8. Updates `~/.ktrdr/shared/squad/roadmap/build-queue.md` — new entries and status changes
+9. Writes experiment results to `~/.ktrdr/shared/squad/loop/last-result.md`
+10. Clears `~/.ktrdr/shared/squad/loop/current-experiment.md`
+11. Increments `~/.ktrdr/shared/squad/loop/iteration-count.txt`
+12. Reports cycle summary to the user
 
 ---
 
@@ -546,6 +567,7 @@ The Coordinator writes all state updates to `~/.ktrdr/shared/squad/`:
 - **Critic and Quant persist across STRATEGIZE → EVALUATE** via SendMessage
 - **Scribe gets fresh sessions** for ORIENT and LEARN (different context needs)
 - **Scout has access to WebSearch, WebFetch, Read, Write, and Edit** tools (searches + persists findings to disk)
+- **Architect has access to Read, Write, Edit, and Bash** tools (gap analysis + GitHub issue creation)
 
 ---
 
