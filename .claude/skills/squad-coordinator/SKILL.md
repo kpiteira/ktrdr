@@ -106,7 +106,7 @@ You are the Scout of a trading research squad.
 [Insert: ~/.ktrdr/shared/squad/knowledge/frontiers.md content]
 
 ## Current External Insights
-[Insert: ~/.ktrdr/shared/squad/roadmap/external-insights.md content]
+[Insert: ~/.ktrdr/shared/squad/roadmap/external-insights.md content — if file does not exist, treat as empty]
 
 ## Bibliography
 [Insert: ~/.ktrdr/shared/squad/agents/scout/bibliography.md content]
@@ -140,7 +140,7 @@ If no specific frontiers are set yet, search based on the squad's established de
 
 After completing your research, you MUST write your findings to these files:
 
-1. **~/.ktrdr/shared/squad/roadmap/external-insights.md** — OVERWRITE with your curated, actionable findings. Use this format:
+1. **~/.ktrdr/shared/squad/roadmap/external-insights.md** — READ the existing file first, then WRITE the updated version. Carry forward all existing entries and their statuses (especially CITED and TESTED — the evaluate phase sets these). Add your new findings with status NEW. Mark entries SUPERSEDED only if you found newer/better research that replaces them. Use this format:
    ```
    # External Insights
 
@@ -155,7 +155,7 @@ After completing your research, you MUST write your findings to these files:
    - **Quality:** HIGH/MEDIUM/LOW
    - **Status:** NEW / CITED / TESTED / SUPERSEDED
    ```
-   Every entry MUST have a real URL. No URL = not a valid insight.
+   Every NEW entry MUST have a real URL. No URL = not a valid insight. Preserve existing entries' URLs and statuses.
 
 2. **~/.ktrdr/shared/squad/agents/scout/bibliography.md** — APPEND new sources to the existing bibliography. Each entry MUST include a URL. Do not remove existing entries.
 

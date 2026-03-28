@@ -1,6 +1,6 @@
 # Handoff — M3: Scout + External Research
 
-## Status: COMPLETE — All 3 tasks done, E2E validation passed (4/5 hard checks, 1 soft fail)
+## Status: COMPLETE — All 3 tasks done, E2E validation passed (1 soft fail: reading-queue unchanged)
 
 ## What Changed
 

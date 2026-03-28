@@ -164,9 +164,9 @@ HAS_SOURCE=false
 HAS_QUALITY=false
 HAS_URL=false
 
-grep -qi "source\|reference\|paper\|article" "$INSIGHTS_FILE" && HAS_SOURCE=true
-grep -qi "quality\|rating\|HIGH\|MEDIUM\|LOW" "$INSIGHTS_FILE" && HAS_QUALITY=true
-grep -qi "http\|https\|arxiv\|doi\|ssrn" "$INSIGHTS_FILE" && HAS_URL=true
+grep -Eqi "source|reference|paper|article" "$INSIGHTS_FILE" && HAS_SOURCE=true
+grep -Eqi "quality|rating|HIGH|MEDIUM|LOW" "$INSIGHTS_FILE" && HAS_QUALITY=true
+grep -Eqi "http|https|arxiv|doi|ssrn" "$INSIGHTS_FILE" && HAS_URL=true
 
 echo "Has source references: $HAS_SOURCE"
 echo "Has quality ratings: $HAS_QUALITY"
@@ -259,9 +259,9 @@ HAS_SEARCH=false
 HAS_URL=false
 HAS_SCOUT=false
 
-grep -qi "search\|searched\|web.*search\|WebSearch\|query" "$DISCUSSION_LOG" && HAS_SEARCH=true
-grep -qi "http\|https\|arxiv\|doi\|ssrn\|scholar" "$DISCUSSION_LOG" && HAS_URL=true
-grep -qi "scout\|Scout\|external.*research\|external.*insight\|bibliography" "$DISCUSSION_LOG" && HAS_SCOUT=true
+grep -Eqi "search|searched|web.*search|WebSearch|query" "$DISCUSSION_LOG" && HAS_SEARCH=true
+grep -Eqi "http|https|arxiv|doi|ssrn|scholar" "$DISCUSSION_LOG" && HAS_URL=true
+grep -Eqi "scout|Scout|external.*research|external.*insight|bibliography" "$DISCUSSION_LOG" && HAS_SCOUT=true
 
 echo "Has search evidence: $HAS_SEARCH"
 echo "Has URLs: $HAS_URL"
@@ -296,7 +296,7 @@ fi
 CROSS_REF=false
 
 # Check for phrases indicating other agents used Scout's input
-grep -qi "scout.*found\|scout.*identified\|scout.*report\|scout.*research\|based on.*scout\|scout.*suggest\|external.*research.*suggest\|literature.*suggest\|paper.*suggest" "$DISCUSSION_LOG" && CROSS_REF=true
+grep -Eqi "scout.*found|scout.*identified|scout.*report|scout.*research|based on.*scout|scout.*suggest|external.*research.*suggest|literature.*suggest|paper.*suggest" "$DISCUSSION_LOG" && CROSS_REF=true
 
 if [ "$CROSS_REF" = true ]; then
   echo "OK: Discussion log shows other agents referenced Scout findings"
