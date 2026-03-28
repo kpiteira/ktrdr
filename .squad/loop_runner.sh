@@ -143,6 +143,8 @@ Key paths:
 - Charters: .squad/agents/{role}/charter.md (repo)
 - Knowledge base: ~/.ktrdr/shared/squad/knowledge/ (shared)
 - Agent histories: ~/.ktrdr/shared/squad/agents/{role}/history.md (shared)
+- Scout files: ~/.ktrdr/shared/squad/agents/scout/{bibliography,reading-queue}.md
+- External insights: ~/.ktrdr/shared/squad/roadmap/external-insights.md
 - Loop state: ~/.ktrdr/shared/squad/loop/ (shared)
 - Nudges: ~/.ktrdr/shared/squad/loop/nudges.md (human feedback — read first!)
 
@@ -249,9 +251,11 @@ After the agents have spoken, YOU (the Coordinator) must update the knowledge ba
 
 5. **agents/{role}/history.md** — APPEND a "## Cycle $cycle_num" section to each participating agent's history with 1-3 sentences of what they learned.
 
-6. **loop/last-result.md** — OVERWRITE with this cycle's result summary.
+6. **roadmap/external-insights.md** — UPDATE insight statuses: mark any insight that influenced this experiment's design as CITED (if referenced) or TESTED (if directly tested). Leave other statuses unchanged. If the file doesn't exist or is empty, skip.
 
-7. **loop/cadence.md** — OVERWRITE with the cadence decision for the next cycle:
+7. **loop/last-result.md** — OVERWRITE with this cycle's result summary.
+
+8. **loop/cadence.md** — OVERWRITE with the cadence decision for the next cycle:
    \`\`\`
    # Cadence
 

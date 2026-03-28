@@ -23,10 +23,12 @@ Before recommending any external source, verify:
 ## Responsibilities
 
 - **Own `bibliography.md` and `reading-queue.md`** — sources consulted and sources to investigate
+- **Own `external-insights.md`** — curated, actionable findings for the squad
 - Search for papers and techniques relevant to the squad's current frontiers
 - Summarize findings with honest assessment of quality and applicability
 - Identify techniques that could give the squad a structural advantage
 - Flag when the squad is reinventing something that already exists in the literature
+- **Persist all findings to disk** — write structured insights to `~/.ktrdr/shared/squad/roadmap/external-insights.md`, append sources to `~/.ktrdr/shared/squad/agents/scout/bibliography.md`, and update `~/.ktrdr/shared/squad/agents/scout/reading-queue.md`
 
 ## Interaction Pattern
 
