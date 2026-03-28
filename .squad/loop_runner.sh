@@ -92,8 +92,8 @@ increment_iteration() {
 get_cadence() {
     local f="$SHARED_DIR/loop/cadence.md"
     if [ -f "$f" ]; then
-        # Extract the cadence value from the file
-        grep -oP '(?<=cadence:\s)(full_squad|quick_iteration|synthesis|pause)' "$f" 2>/dev/null || echo "full_squad"
+        # Extract the cadence value (portable — no grep -P)
+        awk '$1 == "cadence:" { print $2 }' "$f" 2>/dev/null | head -1 || echo "full_squad"
     else
         echo "full_squad"
     fi
@@ -209,7 +209,7 @@ And the Scribe's state updates in clearly labeled sections:
 (1-3 sentence learning)
 \`\`\`
 
-These delimited blocks are REQUIRED — the loop runner parses them to update state files.
+These delimited blocks are REQUIRED — the evaluate phase will use them to write state updates directly to the knowledge base files.
 PROMPT
 }
 

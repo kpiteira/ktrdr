@@ -51,6 +51,8 @@ poll_operation() {
     local last_progress="-1"
     local last_progress_time
     last_progress_time=$(date +%s)
+    local consecutive_empty=0
+    local max_consecutive_empty=10  # 10 consecutive empty responses (~5 min) = give up
 
     while true; do
         local status_json
@@ -59,10 +61,17 @@ poll_operation() {
         status_json=$(echo "$raw_output" | grep -E '^\{' | tail -1) || true
 
         if [ -z "$status_json" ]; then
-            log "Poll: no response for $op_id, retrying..."
+            consecutive_empty=$((consecutive_empty + 1))
+            if (( consecutive_empty >= max_consecutive_empty )); then
+                log "Operation $op_id: $max_consecutive_empty consecutive empty responses, aborting"
+                echo '{"error": "no_response", "operation_id": "'"$op_id"'"}'
+                return 1
+            fi
+            log "Poll: no response for $op_id ($consecutive_empty/$max_consecutive_empty), retrying..."
             sleep "$POLL_INTERVAL"
             continue
         fi
+        consecutive_empty=0
 
         # Parse status and progress
         local status progress
