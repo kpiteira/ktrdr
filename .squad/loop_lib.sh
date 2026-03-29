@@ -41,8 +41,14 @@ needs_synthesis() {
 get_last_synthesis_cycle() {
     local synthesis_file="$1/knowledge/synthesis.md"
     if [ -f "$synthesis_file" ]; then
-        # Extract cycle number from "Last updated: ... Cycle NN" or "Cycle NN"
-        grep -oE 'Cycle [0-9]+' "$synthesis_file" | head -1 | grep -oE '[0-9]+' || echo ""
+        # Extract cycle number from dedicated metadata line: "Last updated: ... Cycle NN"
+        local meta_line
+        meta_line=$(grep -E '^_?Last updated:.*Cycle [0-9]+' "$synthesis_file" | head -1 || true)
+        if [ -n "$meta_line" ]; then
+            echo "$meta_line" | grep -oE 'Cycle [0-9]+' | grep -oE '[0-9]+' || echo ""
+        else
+            echo ""
+        fi
     else
         echo ""
     fi
@@ -62,8 +68,8 @@ get_context_for_agent() {
     local synthesis_file="$shared_dir/knowledge/synthesis.md"
     local last_n=5
 
-    # Scribe during synthesis/learn gets FULL experiments (needs everything to synthesize)
-    if [ "$agent" = "scribe" ] && { [ "$phase" = "synthesis" ] || [ "$phase" = "learn" ]; }; then
+    # Scribe during synthesis gets FULL experiments (needs everything to produce synthesis)
+    if [ "$agent" = "scribe" ] && [ "$phase" = "synthesis" ]; then
         cat "$experiments_file"
         return
     fi
@@ -82,7 +88,7 @@ get_context_for_agent() {
         # Plus last N experiments
         echo "## Recent Experiments (last $last_n)"
         echo ""
-        # Extract last N experiment sections (delimited by ## C or --- markers)
+        # Extract last N experiment sections (delimited by level-2 '## ...' headers)
         _extract_last_n_experiments "$experiments_file" "$last_n"
     else
         # No synthesis available — give full experiments
@@ -208,10 +214,20 @@ estimate_agent_context() {
     history_tokens=$(estimate_context_tokens "$shared_dir/agents/$agent/history.md")
     total=$(( total + history_tokens ))
 
-    # Knowledge files
+    # Knowledge files — after synthesis, most agents receive synthesis.md
+    # instead of full experiments.md, so skip experiments.md when synthesis exists
+    local knowledge_dir="$shared_dir/knowledge"
+    local synthesis_present=0
+    if [ -s "$knowledge_dir/synthesis.md" ]; then
+        synthesis_present=1
+    fi
+
     for f in experiments.md hypotheses.md decisions.md components.md frontiers.md synthesis.md; do
+        if [ "$synthesis_present" -eq 1 ] && [ "$f" = "experiments.md" ]; then
+            continue
+        fi
         local file_tokens
-        file_tokens=$(estimate_context_tokens "$shared_dir/knowledge/$f")
+        file_tokens=$(estimate_context_tokens "$knowledge_dir/$f")
         total=$(( total + file_tokens ))
     done
 

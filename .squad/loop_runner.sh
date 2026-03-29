@@ -50,9 +50,6 @@ CONTEXT_LIMIT=200000
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SQUAD_DIR="$REPO_ROOT/.squad"
 SHARED_DIR="${SQUAD_SHARED_DIR:-$HOME/.ktrdr/shared/squad}"
-
-# Source shared functions
-source "$SQUAD_DIR/loop_lib.sh"
 STRATEGIES_DIR="${SQUAD_STRATEGIES_DIR:-$HOME/.ktrdr/shared/strategies}"
 LOG_DIR="$REPO_ROOT/logs/squad"
 CLAUDE_BIN="${CLAUDE_BIN:-claude}"
@@ -69,7 +66,18 @@ while [[ $# -gt 0 ]]; do
         --dry-run) DRY_RUN=true; shift ;;
         --resume) RESUME=true; shift ;;
         --no-pause) IGNORE_PAUSE=true; shift ;;
-        --synthesis-interval) SYNTHESIS_INTERVAL="$2"; shift 2 ;;
+        --synthesis-interval)
+            if [[ $# -lt 2 ]]; then
+                echo "Error: --synthesis-interval requires a positive integer argument" >&2
+                exit 1
+            fi
+            if ! [[ "$2" =~ ^[1-9][0-9]*$ ]]; then
+                echo "Error: --synthesis-interval must be a positive integer (got: '$2')" >&2
+                exit 1
+            fi
+            SYNTHESIS_INTERVAL="$2"
+            shift 2
+            ;;
         *) echo "Unknown option: $1"; exit 1 ;;
     esac
 done
@@ -358,8 +366,12 @@ log "Synthesis interval: every $SYNTHESIS_INTERVAL cycles"
 
 # Verify prerequisites
 [ -d "$SQUAD_DIR" ] || die ".squad/ directory not found at $REPO_ROOT"
+[ -f "$SQUAD_DIR/loop_lib.sh" ] || die "loop_lib.sh not found at $SQUAD_DIR/loop_lib.sh"
 [ -d "$SHARED_DIR" ] || die "Shared squad dir not found at $SHARED_DIR"
 command -v "$CLAUDE_BIN" >/dev/null || die "claude CLI not found"
+
+# Source shared functions (after preflight confirms .squad/ exists)
+source "$SQUAD_DIR/loop_lib.sh"
 
 # Create log directory
 mkdir -p "$LOG_DIR"
