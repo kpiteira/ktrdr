@@ -23,6 +23,7 @@
 #   --bt-end DATE        Backtest end date (default: 2025-01-01)
 #   --dry-run            Run squad discussion only, skip training/backtest
 #   --resume             Resume from last state (skip if current-experiment exists)
+#   --no-pause           Ignore Director's pause signal and keep looping
 #
 # All state lives in ~/.ktrdr/shared/squad/ (persists across worktrees).
 # Squad machinery (charters, executor) lives in .squad/ (repo).
@@ -39,6 +40,7 @@ BT_START="2021-01-01"
 BT_END="2025-01-01"
 DRY_RUN=false
 RESUME=false
+IGNORE_PAUSE=false
 
 # ---------- paths ----------
 
@@ -60,6 +62,7 @@ while [[ $# -gt 0 ]]; do
         --bt-end) BT_END="$2"; shift 2 ;;
         --dry-run) DRY_RUN=true; shift ;;
         --resume) RESUME=true; shift ;;
+        --no-pause) IGNORE_PAUSE=true; shift ;;
         *) echo "Unknown option: $1"; exit 1 ;;
     esac
 done
@@ -113,8 +116,12 @@ should_continue() {
     local cadence
     cadence=$(get_cadence)
     if [ "$cadence" = "pause" ]; then
-        log "Director signaled pause"
-        return 1
+        if [ "$IGNORE_PAUSE" = true ]; then
+            log "Director signaled pause (IGNORED — --no-pause active)"
+        else
+            log "Director signaled pause"
+            return 1
+        fi
     fi
 
     # Check for fatal error marker
