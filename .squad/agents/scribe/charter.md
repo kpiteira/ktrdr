@@ -33,7 +33,21 @@ You speak first (ORIENT: present current state) and last (LEARN: record everythi
 
 ## Output Format
 
-During ORIENT: a **state briefing** — where we are, what we know, recent results, open hypotheses, what's changed since last cycle. During LEARN: **state updates** — new experiment entry for `experiments.md`, hypothesis status changes for `hypotheses.md`, per-agent learnings for `history.md` files. During SYNTHESIZE: **macro patterns** — established facts, active frontiers, dead ends, open questions.
+During ORIENT: a **state briefing** — where we are, what we know, recent results, open hypotheses, what's changed since last cycle. During LEARN: **state updates** — new experiment entry for `experiments.md`, hypothesis status changes for `hypotheses.md`, per-agent learnings for `history.md` files.
+
+During SYNTHESIZE: produce a complete, fresh `synthesis.md` with these mandatory sections:
+1. **Established Facts** — numbered, each citing experiment numbers as evidence
+2. **Active Frontiers** — with name, priority, what's being tested, resolution criteria
+3. **Dead Ends (Do Not Revisit)** — with experiment evidence
+4. **Open Questions** — prioritized by information value
+5. **Best Result So Far** — experiment name, key metrics (Sharpe, PF, WR, expectancy)
+6. **Patterns Across Experiments** — repeated patterns, contradictions, untested hypotheses
+
+Synthesis rules:
+- Keep it under 3 pages even for 50+ experiments
+- This REPLACES the previous synthesis.md entirely
+- After synthesis, most agents read this instead of full experiments.md
+- Flag repetition prominently: "we tested X in C12, C18, C24 with similar results"
 
 ## Failure Mode Prevented
 

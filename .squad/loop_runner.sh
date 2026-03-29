@@ -24,6 +24,7 @@
 #   --dry-run            Run squad discussion only, skip training/backtest
 #   --resume             Resume from last state (skip if current-experiment exists)
 #   --no-pause           Ignore Director's pause signal and keep looping
+#   --synthesis-interval N  Run synthesis every N cycles (default: 10)
 #
 # All state lives in ~/.ktrdr/shared/squad/ (persists across worktrees).
 # Squad machinery (charters, executor) lives in .squad/ (repo).
@@ -41,12 +42,17 @@ BT_END="2025-01-01"
 DRY_RUN=false
 RESUME=false
 IGNORE_PAUSE=false
+SYNTHESIS_INTERVAL=10
+CONTEXT_LIMIT=200000
 
 # ---------- paths ----------
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SQUAD_DIR="$REPO_ROOT/.squad"
 SHARED_DIR="${SQUAD_SHARED_DIR:-$HOME/.ktrdr/shared/squad}"
+
+# Source shared functions
+source "$SQUAD_DIR/loop_lib.sh"
 STRATEGIES_DIR="${SQUAD_STRATEGIES_DIR:-$HOME/.ktrdr/shared/strategies}"
 LOG_DIR="$REPO_ROOT/logs/squad"
 CLAUDE_BIN="${CLAUDE_BIN:-claude}"
@@ -63,6 +69,7 @@ while [[ $# -gt 0 ]]; do
         --dry-run) DRY_RUN=true; shift ;;
         --resume) RESUME=true; shift ;;
         --no-pause) IGNORE_PAUSE=true; shift ;;
+        --synthesis-interval) SYNTHESIS_INTERVAL="$2"; shift 2 ;;
         *) echo "Unknown option: $1"; exit 1 ;;
     esac
 done
@@ -172,13 +179,21 @@ else
     echo "No new capabilities resolved since last cycle."
 fi)
 
+## Context Management
+
+**Post-synthesis context rules apply.** When providing experiment context to agents:
+- Most agents receive: synthesis.md + last 5 experiments from experiments.md (NOT full experiments.md)
+- Exception: Scribe during SYNTHESIZE gets full experiments.md
+- Check if $SHARED_DIR/knowledge/synthesis.md has content beyond the header. If yes, use synthesis-based context.
+- This is critical for scaling — full experiments.md is ~$(wc -l < "$SHARED_DIR/knowledge/experiments.md" 2>/dev/null || echo "?") lines and growing.
+
 ## Cycle Mode: $cadence
 $(if [ "$cadence" = "full_squad" ]; then
     echo "Run the FULL cycle: ORIENT → STRATEGIZE (Scout, Director, Inventor, Quant, Critic) → DESIGN (Engineer, Architect)"
 elif [ "$cadence" = "quick_iteration" ]; then
     echo "Run QUICK iteration: Skip ORIENT and STRATEGIZE. Go straight to DESIGN (Engineer designs next variant based on last result and frontiers) → skip Scout/Director/Inventor/Quant/Critic debate"
 elif [ "$cadence" = "synthesis" ]; then
-    echo "Run SYNTHESIS session: ORIENT (Scribe presents macro patterns) → full squad review → Director recalibrates frontiers. No experiment execution this cycle."
+    echo "Run SYNTHESIS session: Follow the 'Synthesis Session' instructions in the coordinator skill. Scribe gets FULL experiments.md to produce fresh synthesis.md. Then Director recalibrates frontiers. No experiment execution this cycle."
 fi)
 
 ## Output Requirements
@@ -339,6 +354,7 @@ log "Max cycles: $MAX_CYCLES"
 log "Training: $TRAIN_START to $TRAIN_END"
 log "Backtest: $BT_START to $BT_END"
 log "Dry run: $DRY_RUN"
+log "Synthesis interval: every $SYNTHESIS_INTERVAL cycles"
 
 # Verify prerequisites
 [ -d "$SQUAD_DIR" ] || die ".squad/ directory not found at $REPO_ROOT"
@@ -441,6 +457,22 @@ while should_continue "$ITERATION"; do
 
     # Determine cadence
     CADENCE=$(get_cadence)
+
+    # Auto-trigger synthesis if interval reached (overrides cadence)
+    LAST_SYNTH=$(get_last_synthesis_cycle "$SHARED_DIR")
+    if needs_synthesis "$CYCLE_NUM" "$SYNTHESIS_INTERVAL" "$LAST_SYNTH"; then
+        log "Auto-triggering synthesis (interval=$SYNTHESIS_INTERVAL, last=$LAST_SYNTH)"
+        CADENCE="synthesis"
+    fi
+
+    # Emergency synthesis: check context budget
+    EXPERIMENTS_TOKENS=$(estimate_context_tokens "$SHARED_DIR/knowledge/experiments.md")
+    if needs_emergency_synthesis "$EXPERIMENTS_TOKENS" "$CONTEXT_LIMIT" && [ "$CADENCE" != "synthesis" ]; then
+        log "EMERGENCY: experiments.md at ~${EXPERIMENTS_TOKENS} tokens (limit=${CONTEXT_LIMIT}, threshold=80%)"
+        log "Forcing synthesis cycle to prevent context overflow"
+        CADENCE="synthesis"
+    fi
+
     log "Cadence: $CADENCE"
 
     # Skip experiment on synthesis cycles
@@ -617,6 +649,22 @@ EOF
     else
         log "WARNING: experiments.md was NOT updated during evaluate phase"
     fi
+
+    # Trim agent histories (keep last 20 entries, archive older)
+    for agent_dir in "$SHARED_DIR"/agents/*/; do
+        local_history="$agent_dir/history.md"
+        if [ -f "$local_history" ]; then
+            trim_history "$local_history" 20
+        fi
+    done
+
+    # Log context budget
+    TOTAL_CONTEXT=0
+    for agent in director inventor quant critic engineer scribe scout architect; do
+        AGENT_TOKENS=$(estimate_agent_context "$SHARED_DIR" "$agent")
+        TOTAL_CONTEXT=$(( TOTAL_CONTEXT > AGENT_TOKENS ? TOTAL_CONTEXT : AGENT_TOKENS ))
+    done
+    log "Context budget: max agent ~${TOTAL_CONTEXT} tokens (limit=${CONTEXT_LIMIT})"
 
     # Read cadence from file (Claude should have written it)
     NEW_CADENCE=$(get_cadence)
