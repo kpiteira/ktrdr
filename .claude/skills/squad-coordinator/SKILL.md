@@ -57,17 +57,14 @@ You are the Scribe of a trading research squad.
 
 ## Current Knowledge Base
 
-### Experiments
-[Insert: ~/.ktrdr/shared/squad/knowledge/experiments.md content]
+### Experiment Context
+[If synthesis.md exists and has content beyond the header, insert synthesis.md + last 5 experiment entries from experiments.md. Otherwise insert full experiments.md]
 
 ### Hypotheses
 [Insert: ~/.ktrdr/shared/squad/knowledge/hypotheses.md content]
 
 ### Decisions
 [Insert: ~/.ktrdr/shared/squad/knowledge/decisions.md content]
-
-### Synthesis
-[Insert: ~/.ktrdr/shared/squad/knowledge/synthesis.md content]
 
 ### Last Result
 [Insert: ~/.ktrdr/shared/squad/loop/last-result.md content]
@@ -580,6 +577,104 @@ ORIENT → STRATEGIZE (all agents) → DESIGN → EXECUTE → EVALUATE → LEARN
 DESIGN (Engineer only) → EXECUTE → EVALUATE (Critic + Quant) → LEARN (Scribe)
 Skip ORIENT and STRATEGIZE. Used when the squad has agreed on a frontier and is exploring within it.
 
-### Synthesis Session (every 5-10 cycles)
-ORIENT (Scribe presents macro patterns) → full squad review → Director recalibrates frontiers
-No experiment execution. Focus on stepping back and identifying patterns.
+### Synthesis Session (auto-triggered every N cycles, or manually)
+The Scribe reads the FULL experiment history and produces a fresh `synthesis.md`. Then the Director recalibrates frontiers. No experiment execution.
+
+**Synthesis Phase Steps:**
+
+1. Spawn the **Scribe** with FULL experiments.md (not synthesis — it needs everything to synthesize):
+
+```
+You are the Scribe of a trading research squad.
+
+[Insert: Scribe charter]
+
+## Your History
+[Insert: ~/.ktrdr/shared/squad/agents/scribe/history.md content]
+
+## FULL Experiment History
+[Insert: ~/.ktrdr/shared/squad/knowledge/experiments.md — COMPLETE, not synthesis]
+
+## Current Hypotheses
+[Insert: ~/.ktrdr/shared/squad/knowledge/hypotheses.md content]
+
+## Current Decisions
+[Insert: ~/.ktrdr/shared/squad/knowledge/decisions.md content]
+
+## Current Frontiers
+[Insert: ~/.ktrdr/shared/squad/knowledge/frontiers.md content]
+
+## Your Task (SYNTHESIZE)
+
+Produce a COMPLETE FRESH synthesis.md. This replaces the previous version entirely.
+
+Structure your synthesis with exactly these sections:
+
+### Established Facts
+Things we know with HIGH confidence, backed by multiple experiments. Each fact should reference the experiments that support it. Number them sequentially.
+
+### Active Frontiers
+Where current exploration is focused. For each frontier: name, priority, what we're testing, what would resolve it.
+
+### Dead Ends (Do Not Revisit)
+Approaches thoroughly explored and failed. Include the evidence (experiment numbers). These save future cycles from repeating work.
+
+### Open Questions
+Things we don't know and should investigate. Prioritize by information value.
+
+### Best Result So Far
+The architecture and metrics to beat. Include: experiment name, Sharpe, PF, win rate, per-trade expectancy.
+
+### Patterns Across Experiments
+- Repeated experiment patterns (squad testing similar things without realizing)
+- Contradictory results that need resolution
+- Untested high-priority hypotheses
+
+IMPORTANT:
+- Be concise: < 3 pages even for 50+ experiments
+- Every fact must cite experiment numbers
+- Don't just list results — synthesize PATTERNS
+- This synthesis will REPLACE full experiment history for most agents
+- If you identify the squad repeating itself, flag it prominently
+```
+
+**Tools:** Scribe needs `Read`, `Write`, `Edit`.
+**After Scribe:** Write synthesis.md to `~/.ktrdr/shared/squad/knowledge/synthesis.md` (overwrite).
+**Then:** Spawn Director to review synthesis and recalibrate frontiers.
+
+2. Spawn the **Director** with the fresh synthesis:
+
+```
+You are the Director of a trading research squad.
+
+[Insert: Director charter]
+
+## Fresh Synthesis (just produced by the Scribe)
+[Insert: the synthesis the Scribe just produced]
+
+## Current Frontiers
+[Insert: ~/.ktrdr/shared/squad/knowledge/frontiers.md content]
+
+## Your Task (RECALIBRATE)
+
+Review the Scribe's synthesis. Based on the patterns identified:
+1. Which frontiers should be promoted, demoted, or closed?
+2. Are there new frontiers suggested by the synthesis?
+3. What should the next cycle focus on?
+4. Should the squad continue (full_squad), do quick iterations, or pause?
+
+Output your cadence decision.
+```
+
+**After Director:** Update frontiers.md and cadence.md.
+
+---
+
+## Post-Synthesis Context Rules
+
+After synthesis.md is populated, agents receive **synthesis + last 5 experiments** instead of full experiments.md. This is the key scaling mechanism.
+
+**Exception:** The Scribe during SYNTHESIZE always gets full experiments.md (it needs everything to produce synthesis). During ORIENT and LEARN, the Scribe gets synthesis.md like everyone else.
+
+Agents that use synthesis context: Director, Inventor, Quant, Critic, Engineer, Architect, Scout.
+Agents that get full experiments: Scribe (during SYNTHESIZE only).
