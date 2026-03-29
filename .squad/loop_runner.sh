@@ -384,8 +384,8 @@ ensure_squad_labels() {
     fi
 
     cd "$REPO_ROOT"
-    gh label create "squad:architect" --description "Capability gap identified by Research Squad Architect" --color "7057ff" 2>/dev/null
-    gh label create "capability-gap" --description "Missing capability blocking squad experiments" --color "d4c5f9" 2>/dev/null
+    gh label create "squad:architect" --description "Capability gap identified by Research Squad Architect" --color "7057ff" 2>/dev/null || true
+    gh label create "capability-gap" --description "Missing capability blocking squad experiments" --color "d4c5f9" 2>/dev/null || true
     log "GitHub labels verified"
 }
 
