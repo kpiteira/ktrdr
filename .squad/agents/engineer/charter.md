@@ -83,10 +83,14 @@ nn_inputs:                   # Required. List of neural network input specs.
 model:                       # Required.
   type: lstm                 # mlp, lstm, gru
   architecture:
-    sequence_length: 20      # LSTM/GRU only
+    # LSTM/GRU architecture:
+    sequence_length: 20      # LSTM/GRU only (not for MLP!)
     hidden_size: 64
     num_layers: 2
     dropout: 0.3
+    # MLP architecture (DIFFERENT format — uses hidden_layers list, NOT hidden_size/num_layers):
+    # hidden_layers: [64, 32]  # List of layer sizes
+    # dropout: 0.3
 
 decisions:                   # Required.
   output_format: classification  # classification or regression

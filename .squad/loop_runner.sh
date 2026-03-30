@@ -659,14 +659,18 @@ EOF
         log "Executing experiment: train + backtest"
         RESULTS_FILE="$LOG_DIR/cycle_${CYCLE_NUM}_results.json"
 
+        EXEC_STDERR=$(mktemp "${TMPDIR:-/tmp}/squad-exec-stderr-XXXXXX")
         "$SQUAD_DIR/executor.sh" "$STRATEGY_FILE" \
             "$TRAIN_START" "$TRAIN_END" \
             "$BT_START" "$BT_END" \
-            > "$RESULTS_FILE" 2>>"$CYCLE_LOG" || {
+            > "$RESULTS_FILE" 2>"$EXEC_STDERR" || {
             log "Executor failed for $EXPERIMENT_NAME"
-            # Record failure but don't stop the loop
-            echo '{"error": "executor_failed", "experiment": "'"$EXPERIMENT_NAME"'"}' > "$RESULTS_FILE"
+            # Capture last 10 lines of stderr for diagnosis
+            EXEC_ERROR=$(tail -10 "$EXEC_STDERR" 2>/dev/null | tr '\n' ' ' | cut -c1-500)
+            cat "$EXEC_STDERR" >> "$CYCLE_LOG"
+            echo "{\"error\": \"executor_failed\", \"experiment\": \"$EXPERIMENT_NAME\", \"detail\": $(echo "$EXEC_ERROR" | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read().strip()))' 2>/dev/null || echo '\"unknown\"')}" > "$RESULTS_FILE"
         }
+        rm -f "$EXEC_STDERR"
     fi
 
     log "Results saved to $RESULTS_FILE"
