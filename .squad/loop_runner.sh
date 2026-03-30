@@ -201,21 +201,32 @@ $(if [ "$cadence" = "full_squad" ]; then
 elif [ "$cadence" = "quick_iteration" ]; then
     echo "Run QUICK iteration: Skip ORIENT and STRATEGIZE. Go straight to DESIGN (Engineer designs next variant based on last result and frontiers) → skip Scout/Director/Inventor/Quant/Critic debate"
 elif [ "$cadence" = "synthesis" ]; then
-    echo "Run SYNTHESIS session: Follow the 'Synthesis Session' instructions in the coordinator skill. Scribe gets FULL experiments.md to produce fresh synthesis.md. Then Director recalibrates frontiers. No experiment execution this cycle."
+    echo "Run SYNTHESIS session: Follow the 'Synthesis Session' instructions in the coordinator skill. Scribe gets FULL experiments.md to produce fresh synthesis.md. Then Director recalibrates frontiers. No experiment execution this cycle.
+
+IMPORTANT — D-rule review: During synthesis, the Director must review ALL active decisions in decisions.md and ask for each one: 'Is the condition this decision was responding to still true?' If the underlying problem has been fixed (e.g., infrastructure bugs resolved, executor improved), mark the decision as RESOLVED in decisions.md. D-rules that gate on fixed problems must not block future experiments. This prevents defensive rule accumulation from paralyzing the squad."
 fi)
 
 ## Output Requirements
 
-At the end of your cycle, output a clearly delimited block with the experiment specification:
+At the end of your cycle, output ONE of these:
 
+### Option A: Experiment ready
 \`\`\`yaml
 # SQUAD_EXPERIMENT_SPEC
 name: experiment_name_here
 ... (full v3 strategy YAML)
 \`\`\`
 
-And a cadence decision for the next cycle:
+### Option B: No experiment this cycle
+If the squad concludes no experiment is worth running (e.g., infrastructure blocker, need human intervention, or all viable experiments are blocked), output:
+\`\`\`
+# SQUAD_NO_EXPERIMENT
+reason: one line explanation of why no experiment was designed
+blocker: what needs to happen before the next experiment can run
+\`\`\`
+This is a valid outcome — not a failure. The loop will record the reason and continue.
 
+### Always include cadence:
 \`\`\`
 # SQUAD_CADENCE
 cadence: full_squad|quick_iteration|synthesis|pause
@@ -566,6 +577,29 @@ while should_continue "$ITERATION"; do
         # Save full output for debugging
         echo "$CLAUDE_OUTPUT" > "$LOG_DIR/cycle_${CYCLE_NUM}_discussion.md"
 
+        # Check if squad explicitly said "no experiment this cycle"
+        NO_EXPERIMENT_REASON=$(echo "$CLAUDE_OUTPUT" | python3 -c "
+import sys, re
+text = sys.stdin.read()
+m = re.search(r'# SQUAD_NO_EXPERIMENT\nreason:\s*(.*?)(?:\nblocker:|\n\`\`\`|\Z)', text, re.DOTALL)
+if m:
+    print(m.group(1).strip()[:200])
+" 2>/dev/null)
+        if [ -n "$NO_EXPERIMENT_REASON" ]; then
+            log "Squad decided: no experiment this cycle. Reason: $NO_EXPERIMENT_REASON"
+            # Record in knowledge base
+            echo "- **Cycle $CYCLE_NUM ($(date -u +%Y-%m-%d)):** No experiment — $NO_EXPERIMENT_REASON" >> "$SHARED_DIR/knowledge/experiments.md"
+            CONSECUTIVE_FAILURES=$((CONSECUTIVE_FAILURES + 1))
+            if (( CONSECUTIVE_FAILURES >= MAX_CONSECUTIVE_FAILURES )); then
+                log "STALL DETECTED: $CONSECUTIVE_FAILURES consecutive cycles with no experiment. Stopping."
+                echo "Stall: $CONSECUTIVE_FAILURES cycles with no experiment. Last reason: $NO_EXPERIMENT_REASON" > "$SHARED_DIR/loop/fatal-error.md"
+                break
+            fi
+            increment_iteration
+            ITERATION=$(get_iteration)
+            continue
+        fi
+
         # Extract strategy YAML from output text
         STRATEGY_YAML=$(extract_strategy_yaml "$CLAUDE_OUTPUT")
 
@@ -705,7 +739,34 @@ EOF
     if [ "$EXPERIMENTS_MOD" -gt "$(($(date +%s) - 300))" ] 2>/dev/null; then
         log "State updates verified: experiments.md was recently modified"
     else
-        log "WARNING: experiments.md was NOT updated during evaluate phase"
+        log "WARNING: experiments.md was NOT updated during evaluate phase — running fallback"
+        # Fallback: append a minimal experiment record from the results JSON
+        FALLBACK_ENTRY=$(python3 -c "
+import json, sys
+try:
+    data = json.load(open('$RESULTS_FILE'))
+    exp = data.get('experiment', 'unknown')
+    error = data.get('error', '')
+    if error:
+        print(f'## {exp} (Cycle $CYCLE_NUM)\n\n**Date:** $(date -u +%Y-%m-%d)\n**Result:** FAILED — {error}. Detail: {data.get(\"detail\", \"no detail\")[:200]}\n')
+    else:
+        t = data.get('training', {}).get('summary', {})
+        b = data.get('backtest', {}).get('summary', {})
+        es = t.get('epoch_summary', {})
+        print(f'## {exp} (Cycle $CYCLE_NUM)\n')
+        print(f'**Date:** $(date -u +%Y-%m-%d)')
+        print(f'**Training:** {es.get(\"total_epochs\", \"?\")} epochs, best val_loss {es.get(\"best_val_loss\", \"?\")} at epoch {es.get(\"best_val_loss_epoch\", \"?\")}')
+        print(f'**Test metrics:** {t.get(\"test_metrics\", {})}')
+        print(f'**Backtest:** {b.get(\"result_summary\", \"no summary\")}')
+        print()
+except Exception as e:
+    print(f'## Cycle $CYCLE_NUM — {exp}\n\n**Fallback record:** Could not parse results: {e}\n')
+" 2>/dev/null)
+        if [ -n "$FALLBACK_ENTRY" ]; then
+            echo "" >> "$SHARED_DIR/knowledge/experiments.md"
+            echo "$FALLBACK_ENTRY" >> "$SHARED_DIR/knowledge/experiments.md"
+            log "Fallback: appended minimal experiment record to experiments.md"
+        fi
     fi
 
     # Trim agent histories (keep last 20 entries, archive older)

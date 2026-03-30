@@ -606,6 +606,39 @@ class StrategyValidator:
                 "Detected old model format with input_size/output_size - consider upgrading"
             )
 
+        # Validate architecture fields match model type
+        model_type = model_config.get("type", "")
+        architecture = model_config.get("architecture", {})
+        if isinstance(architecture, dict) and model_type:
+            if model_type == "mlp":
+                if "hidden_layers" not in architecture:
+                    result.is_valid = False
+                    result.errors.append(
+                        "MLP model requires 'architecture.hidden_layers' (list of layer sizes). "
+                        "Got hidden_size/num_layers which is LSTM/GRU format."
+                    )
+                elif not isinstance(architecture["hidden_layers"], list):
+                    result.is_valid = False
+                    result.errors.append(
+                        "MLP 'architecture.hidden_layers' must be a list (e.g. [64, 32])"
+                    )
+                if "sequence_length" in architecture:
+                    result.warnings.append(
+                        "MLP does not use 'sequence_length' — that's an LSTM/GRU field"
+                    )
+            elif model_type in ("lstm", "gru"):
+                if "sequence_length" not in architecture:
+                    result.is_valid = False
+                    result.errors.append(
+                        f"{model_type.upper()} model requires 'architecture.sequence_length'"
+                    )
+                if "hidden_layers" in architecture:
+                    result.is_valid = False
+                    result.errors.append(
+                        f"{model_type.upper()} does not use 'hidden_layers' — "
+                        "that's an MLP field. Use 'hidden_size' instead."
+                    )
+
         return result
 
     def _validate_training_section(
