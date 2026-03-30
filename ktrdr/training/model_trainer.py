@@ -128,6 +128,7 @@ class ModelTrainer:
         print(f"🚀 Using {device_info['device_name']} for training")
         self.history: list[TrainingMetrics] = []
         self.best_model_state: Optional[dict[str, Any]] = None
+        self.best_val_loss = float("inf")
         self.best_val_accuracy = 0.0
         self.progress_callback = progress_callback
         self.checkpoint_callback = checkpoint_callback
@@ -137,10 +138,10 @@ class ModelTrainer:
         if resume_context is not None and resume_context.best_model_weights:
             buffer = BytesIO(resume_context.best_model_weights)
             self.best_model_state = torch.load(buffer, weights_only=True)
-            # Estimate best_val_accuracy from best_val_loss
-            # (inverse relationship: lower loss = higher accuracy approximation)
+            # Restore best val_loss from checkpoint
             if resume_context.best_val_loss < float("inf"):
-                # Use a simple heuristic: accuracy ~ 1 - loss (clamped to [0, 1])
+                self.best_val_loss = resume_context.best_val_loss
+                # Estimate accuracy from loss (heuristic for backwards compat)
                 self.best_val_accuracy = max(
                     0.0, min(1.0, 1.0 - resume_context.best_val_loss)
                 )
@@ -378,6 +379,7 @@ class ModelTrainer:
         early_stopping = (
             EarlyStopping(
                 patience=early_stopping_config.get("patience", 10),
+                min_delta=early_stopping_config.get("min_delta", 0.001),
                 monitor=early_stopping_config.get("monitor", "val_loss"),
             )
             if early_stopping_config
@@ -573,9 +575,10 @@ class ModelTrainer:
                             val_accuracy = 0.0
                     val_loss = val_loss.item()
 
-                # Save best model
-                if val_accuracy > self.best_val_accuracy:
-                    self.best_val_accuracy = val_accuracy
+                # Save best model (checkpoint on val_loss, not accuracy — GAP-009 fix)
+                if val_loss is not None and val_loss < self.best_val_loss:
+                    self.best_val_loss = val_loss
+                    self.best_val_accuracy = val_accuracy or 0.0
                     self.best_model_state = model.state_dict().copy()
 
             # Record metrics
@@ -881,6 +884,7 @@ class ModelTrainer:
         early_stopping = (
             EarlyStopping(
                 patience=early_stopping_config.get("patience", 10),
+                min_delta=early_stopping_config.get("min_delta", 0.001),
                 monitor=early_stopping_config.get("monitor", "val_loss"),
             )
             if early_stopping_config
@@ -1024,9 +1028,10 @@ class ModelTrainer:
                         val_accuracy = 0.0
                     val_loss = val_loss.item()
 
-                # Save best model
-                if val_accuracy > self.best_val_accuracy:
-                    self.best_val_accuracy = val_accuracy
+                # Save best model (checkpoint on val_loss, not accuracy — GAP-009 fix)
+                if val_loss is not None and val_loss < self.best_val_loss:
+                    self.best_val_loss = val_loss
+                    self.best_val_accuracy = val_accuracy or 0.0
                     self.best_model_state = model.state_dict().copy()
 
             # Record metrics

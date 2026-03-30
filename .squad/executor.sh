@@ -242,12 +242,69 @@ print(json.dumps({'error': 'backtest_failed', 'operation_id': '$BT_OP_ID', 'outp
 }
 log "Backtest complete"
 
-# Step 8: Assemble structured results
+# Step 8: Assemble structured results (summarized — only what the squad needs to learn)
 python3 -c "
 import json
 
-train_result = json.load(open('$TRAIN_RESULT_FILE'))
-bt_result = json.load(open('$BT_RESULT_FILE'))
+train_raw = json.load(open('$TRAIN_RESULT_FILE'))
+bt_raw = json.load(open('$BT_RESULT_FILE'))
+
+def extract_training_summary(data):
+    \"\"\"Extract only the metrics the squad needs — not the 23MB epoch array.\"\"\"
+    summary = data.get('result_summary', data.get('result', data))
+    if isinstance(summary, dict) and 'result_summary' in summary:
+        summary = summary['result_summary']
+
+    # Extract epoch history (last copy only, deduplicated)
+    metrics = data.get('metrics', data.get('result', {}).get('metrics', {}))
+    epochs_raw = metrics.get('epochs', [])
+    # The epochs array contains duplicated snapshots from progress polls.
+    # Find the longest (most complete) snapshot.
+    best_epochs = []
+    for entry in epochs_raw:
+        if isinstance(entry, list) and len(entry) > len(best_epochs):
+            best_epochs = entry
+
+    # Summarize epoch curve: first, best val_loss, last
+    epoch_summary = {}
+    if best_epochs:
+        val_losses = [(e.get('epoch', i), e.get('val_loss', 999)) for i, e in enumerate(best_epochs)]
+        best_idx = min(val_losses, key=lambda x: x[1])
+        epoch_summary = {
+            'total_epochs': len(best_epochs),
+            'best_val_loss_epoch': best_idx[0],
+            'best_val_loss': round(best_idx[1], 6),
+            'first_val_loss': round(val_losses[0][1], 6) if val_losses else None,
+            'final_val_loss': round(val_losses[-1][1], 6) if val_losses else None,
+            'first_train_loss': round(best_epochs[0].get('train_loss', 0), 6) if best_epochs else None,
+            'final_train_loss': round(best_epochs[-1].get('train_loss', 0), 6) if best_epochs else None,
+            'first_val_accuracy': round(best_epochs[0].get('val_accuracy', 0), 4) if best_epochs else None,
+            'final_val_accuracy': round(best_epochs[-1].get('val_accuracy', 0), 4) if best_epochs else None,
+            'best_val_accuracy': round(max(e.get('val_accuracy', 0) for e in best_epochs), 4),
+            'early_stopped': len(best_epochs) < 200,
+        }
+
+    # Get test metrics
+    test_metrics = summary.get('test_metrics', {}) if isinstance(summary, dict) else {}
+    training_metrics = summary.get('training_metrics', {}) if isinstance(summary, dict) else {}
+
+    return {
+        'status': data.get('status', data.get('result', {}).get('status', 'unknown')),
+        'model_path': summary.get('model_path', '') if isinstance(summary, dict) else '',
+        'test_metrics': test_metrics,
+        'epoch_summary': epoch_summary,
+        'data_summary': summary.get('data_summary', {}) if isinstance(summary, dict) else {},
+    }
+
+def extract_backtest_summary(data):
+    \"\"\"Extract backtest results — trades, PF, Sharpe, etc.\"\"\"
+    summary = data.get('result_summary', data.get('result', data))
+    if isinstance(summary, dict) and 'result_summary' in summary:
+        summary = summary['result_summary']
+    return {
+        'status': data.get('status', data.get('result', {}).get('status', 'unknown')),
+        'result_summary': summary if isinstance(summary, dict) else {'raw': str(summary)[:500]},
+    }
 
 output = {
     'experiment': '$NAME',
@@ -256,13 +313,13 @@ output = {
         'start_date': '$TRAIN_START',
         'end_date': '$TRAIN_END',
         'model_path': '$MODEL_PATH',
-        'result': train_result
+        'summary': extract_training_summary(train_raw),
     },
     'backtest': {
         'operation_id': '$BT_OP_ID',
         'start_date': '$BT_START',
         'end_date': '$BT_END',
-        'result': bt_result
+        'summary': extract_backtest_summary(bt_raw),
     }
 }
 

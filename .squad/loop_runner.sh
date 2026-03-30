@@ -453,6 +453,8 @@ ensure_squad_labels
 
 ITERATION=$(get_iteration)
 log "Starting from iteration $ITERATION"
+CONSECUTIVE_FAILURES=0
+MAX_CONSECUTIVE_FAILURES=3  # Stop after 3 consecutive non-productive cycles
 
 while should_continue "$ITERATION"; do
     CYCLE_NUM=$((ITERATION + 1))
@@ -564,11 +566,28 @@ while should_continue "$ITERATION"; do
         # Save full output for debugging
         echo "$CLAUDE_OUTPUT" > "$LOG_DIR/cycle_${CYCLE_NUM}_discussion.md"
 
-        # Extract strategy YAML
+        # Extract strategy YAML from output text
         STRATEGY_YAML=$(extract_strategy_yaml "$CLAUDE_OUTPUT")
+
+        # If no YAML in output, check if the discussion wrote a strategy file to disk
+        if [ -z "$STRATEGY_YAML" ]; then
+            # Look for recently written squad strategy files (modified in last 30 min)
+            DISK_STRATEGY=$(find "$STRATEGIES_DIR" -name "squad_c*.yaml" -newer "$CYCLE_LOG" -type f 2>/dev/null | head -1)
+            if [ -n "$DISK_STRATEGY" ]; then
+                log "No YAML in output, but found tool-written file: $DISK_STRATEGY"
+                STRATEGY_YAML=$(cat "$DISK_STRATEGY")
+            fi
+        fi
+
         if [ -z "$STRATEGY_YAML" ]; then
             log "WARNING: No strategy YAML extracted from cycle $CYCLE_NUM"
-            log "Check $LOG_DIR/cycle_${CYCLE_NUM}_discussion.md for details"
+            CONSECUTIVE_FAILURES=$((CONSECUTIVE_FAILURES + 1))
+            if (( CONSECUTIVE_FAILURES >= MAX_CONSECUTIVE_FAILURES )); then
+                log "STALL DETECTED: $CONSECUTIVE_FAILURES consecutive non-productive cycles. Stopping."
+                log "The squad may be stuck. Check discussion logs for diagnosis."
+                echo "Stall: $CONSECUTIVE_FAILURES consecutive failures" > "$SHARED_DIR/loop/fatal-error.md"
+                break
+            fi
             increment_iteration
             ITERATION=$(get_iteration)
             continue
@@ -577,11 +596,19 @@ while should_continue "$ITERATION"; do
         # Reject non-v3 strategies (manual analysis protocols, diagnostic specs, etc.)
         if ! echo "$STRATEGY_YAML" | grep -q '^version:.*3\.0'; then
             log "WARNING: Cycle $CYCLE_NUM produced non-v3 strategy (missing version: 3.0). Skipping."
-            log "The squad must produce executable v3 strategy YAMLs, not manual analysis protocols."
+            CONSECUTIVE_FAILURES=$((CONSECUTIVE_FAILURES + 1))
+            if (( CONSECUTIVE_FAILURES >= MAX_CONSECUTIVE_FAILURES )); then
+                log "STALL DETECTED: $CONSECUTIVE_FAILURES consecutive non-productive cycles. Stopping."
+                echo "Stall: $CONSECUTIVE_FAILURES consecutive non-v3 strategies" > "$SHARED_DIR/loop/fatal-error.md"
+                break
+            fi
             increment_iteration
             ITERATION=$(get_iteration)
             continue
         fi
+
+        # Reset failure counter on successful extraction
+        CONSECUTIVE_FAILURES=0
 
         # Determine experiment name from YAML
         EXPERIMENT_NAME=$(echo "$STRATEGY_YAML" | grep "^name:" | head -1 | sed 's/name:\s*//' | tr -d '"'"'" | tr -d '[:space:]')
@@ -589,6 +616,21 @@ while should_continue "$ITERATION"; do
             EXPERIMENT_NAME="squad_cycle${CYCLE_NUM}"
         fi
         log "Experiment: $EXPERIMENT_NAME"
+
+        # Dedup: skip if this exact experiment was already executed in this run
+        if [ -f "$LOG_DIR/cycle_*_results.json" ] 2>/dev/null && \
+           grep -l "\"experiment\": \"$EXPERIMENT_NAME\"" "$LOG_DIR"/cycle_*_results.json 2>/dev/null | head -1 | grep -q .; then
+            log "WARNING: Experiment $EXPERIMENT_NAME already has results. Skipping duplicate."
+            CONSECUTIVE_FAILURES=$((CONSECUTIVE_FAILURES + 1))
+            if (( CONSECUTIVE_FAILURES >= MAX_CONSECUTIVE_FAILURES )); then
+                log "STALL DETECTED: squad keeps proposing already-executed experiments. Stopping."
+                echo "Stall: repeated experiment $EXPERIMENT_NAME" > "$SHARED_DIR/loop/fatal-error.md"
+                break
+            fi
+            increment_iteration
+            ITERATION=$(get_iteration)
+            continue
+        fi
 
         # Write strategy file
         STRATEGY_FILE="$STRATEGIES_DIR/${EXPERIMENT_NAME}.yaml"
