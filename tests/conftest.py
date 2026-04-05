@@ -13,6 +13,11 @@ _project_root = Path(__file__).parent.parent
 if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 
+# Add .squad/ to path for squad orchestrator imports
+_squad_dir = _project_root / ".squad"
+if _squad_dir.exists() and str(_squad_dir) not in sys.path:
+    sys.path.insert(0, str(_squad_dir))
+
 # Force all tests to use Haiku (cheapest model) to avoid burning API budget
 # This applies to both unit tests (which should be mocked) and integration tests
 # that make real Claude API calls.
