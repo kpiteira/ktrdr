@@ -20,7 +20,11 @@ from ktrdr.agents.runtime.protocol import AgentResult
 from squad_engine.agent_manager import AgentManager
 from squad_engine.context import ContextLoader
 from squad_engine.director_prompt import build_director_prompt
-from squad_engine.squad_tools import ConversationEntry, CycleState, create_squad_mcp_server
+from squad_engine.squad_tools import (
+    ConversationEntry,
+    CycleState,
+    create_squad_mcp_server,
+)
 
 logger = get_logger(__name__)
 

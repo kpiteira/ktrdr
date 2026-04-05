@@ -14,7 +14,11 @@ if _squad_dir not in sys.path:
     sys.path.insert(0, _squad_dir)
 
 from squad_engine.director_prompt import build_director_prompt  # noqa: E402
-from squad_engine.loop import CycleResult, _write_conversation_log, run_cycle  # noqa: E402
+from squad_engine.loop import (  # noqa: E402
+    CycleResult,
+    _write_conversation_log,
+    run_cycle,
+)
 from squad_engine.squad_tools import ConversationEntry  # noqa: E402
 
 from ktrdr.agents.runtime.protocol import AgentResult  # noqa: E402

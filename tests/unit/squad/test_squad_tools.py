@@ -11,7 +11,11 @@ _squad_dir = str(Path(__file__).resolve().parents[3] / ".squad")
 if _squad_dir not in sys.path:
     sys.path.insert(0, _squad_dir)
 
-from squad_engine.squad_tools import ConversationEntry, CycleState, create_squad_mcp_server  # noqa: E402
+from squad_engine.squad_tools import (  # noqa: E402
+    ConversationEntry,
+    CycleState,
+    create_squad_mcp_server,
+)
 
 
 class TestCycleState:
