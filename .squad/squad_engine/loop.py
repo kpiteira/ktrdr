@@ -126,8 +126,15 @@ async def run_cycle(
         result.agents_spawned,
     )
 
-    # Write conversation log for review
-    _write_conversation_log(result, context_loader.shared_dir)
+    # Write conversation log for review — don't let IO failure lose the cycle result
+    try:
+        _write_conversation_log(result, context_loader.shared_dir)
+    except Exception as e:
+        logger.warning(
+            "Failed to write conversation log for cycle %d: %s",
+            iteration,
+            e,
+        )
 
     return result
 

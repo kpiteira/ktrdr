@@ -64,6 +64,8 @@ on the cycle's situation.
 | Scribe | `knowledge/synthesis.md`, last 5 experiments, full cycle transcript (inline) |
 
 **Tips:**
+- The `context` parameter takes file paths only. For dynamic context like "last 5
+  experiments" or "the current proposal", summarize inline in the message instead.
 - For Quant and Critic, you often don't need context files — relay the relevant
   information directly in the message. This saves tokens.
 - The Engineer typically needs the most context (components + synthesis + experiments).
@@ -85,7 +87,7 @@ Spawn consultants based on what the cycle needs — not every cycle needs everyo
 
 ### When NOT to Consult
 
-- **quick_iteration cadence**: Director + Engineer only. Minor variant of previous experiment — no new perspective needed.
+- **quick_iteration cadence**: Director + Engineer + Scribe only. Skip other consultants — minor variant of previous experiment, no new perspective needed.
 - **synthesis cadence**: Director + Scribe only. Recording and distilling, not researching.
 - When the experiment is a direct repeat with one changed parameter.
 
@@ -185,7 +187,7 @@ def _build_task_instructions(cadence: str) -> list[str]:
         return [
             "Run a **quick_iteration** cycle — minor variant of the previous experiment.",
             "",
-            "This is a focused cycle. Use Engineer only — skip consulting other agents.",
+            "This is a focused cycle. Use Engineer + Scribe only — skip other consultants.",
             "The goal is a targeted parameter or feature change, not a new direction.",
             "",
             "1. **ORIENT**: Read recent results. Identify what to tweak.",

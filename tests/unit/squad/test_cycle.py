@@ -326,8 +326,8 @@ class TestM2ConsultantTriggers:
         assert "quick_iteration" in quick_prompt
         quick_lower = quick_prompt.lower()
         assert (
-            "engineer only" in quick_lower
-            or "skip consult" in quick_lower
+            "engineer + scribe only" in quick_lower
+            or "skip other consult" in quick_lower
             or "minor variant" in quick_lower
         )
 
