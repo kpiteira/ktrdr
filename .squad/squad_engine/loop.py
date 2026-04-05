@@ -68,10 +68,13 @@ async def run_cycle(
         allowed_roles={"engineer", "scribe"},  # M1: only these two
     )
 
-    # Read cycle context
-    cadence = context_loader.load_file("loop/cadence.md").strip()
-    if "cadence:" in cadence:
-        cadence = cadence.split("cadence:")[1].strip().split("\n")[0].strip()
+    # Read cycle context — default to full_squad if missing
+    cadence = "full_squad"
+    cadence_content = context_loader.load_file("loop/cadence.md").strip()
+    if cadence_content and "cadence:" in cadence_content:
+        parsed = cadence_content.split("cadence:")[1].strip().split("\n")[0].strip()
+        if parsed:
+            cadence = parsed
 
     nudges = context_loader.load_file("loop/nudges.md")
 
@@ -93,7 +96,8 @@ async def run_cycle(
         else:
             # Production mode: run Director with squad MCP tools
             await _run_director_session(
-                director_prompt, agent_manager, context_loader, result
+                director_prompt, agent_manager, context_loader, result,
+                charter_base=charter_base,
             )
 
     except Exception as e:
@@ -123,6 +127,7 @@ async def _run_director_session(
     agent_manager: AgentManager,
     context_loader: ContextLoader,
     result: CycleResult,
+    charter_base: Path | None = None,
 ) -> None:
     """Run the Director as a Claude Code session with squad MCP tools.
 
@@ -146,7 +151,8 @@ async def _run_director_session(
         cycle_state=cycle_state,
     )
 
-    director_charter = Path(__file__).resolve().parent.parent / "agents" / "director" / "charter.md"
+    charter_dir = charter_base or Path(__file__).resolve().parent.parent / "agents"
+    director_charter = charter_dir / "director" / "charter.md"
     director = PersistentAgentSession(
         role="director",
         charter_path=director_charter,
@@ -165,7 +171,15 @@ async def _run_director_session(
         result.agents_spawned = cycle_state.agents_spawned
         result.experiment_result = cycle_state.experiment_result
         result.cadence_next = cycle_state.cadence_next
-        result.status = "COMPLETE"
+
+        if cycle_state.cycle_complete:
+            result.status = "COMPLETE"
+        else:
+            logger.warning(
+                "Director session ended without calling cycle_complete"
+            )
+            result.status = "FAILED"
+            result.error = "Director did not signal cycle_complete"
 
     finally:
         await director.stop()

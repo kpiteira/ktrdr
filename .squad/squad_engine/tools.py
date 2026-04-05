@@ -47,16 +47,36 @@ async def _run_subprocess(
     timeout: int = DEFAULT_TIMEOUT,
     cwd: str | None = None,
 ) -> asyncio.subprocess.Process:
-    """Run a subprocess and wait for completion."""
+    """Run a subprocess and wait for completion.
+
+    On timeout, terminates (then kills) the child process to avoid
+    leaking long-running executor.sh or training jobs.
+    """
     proc = await asyncio.create_subprocess_exec(
         *cmd,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
         cwd=cwd,
     )
-    proc.stdout, proc.stderr = await asyncio.wait_for(
-        proc.communicate(), timeout=timeout
-    )
+    communicate_task = asyncio.create_task(proc.communicate())
+    try:
+        stdout, stderr = await asyncio.wait_for(
+            asyncio.shield(communicate_task), timeout=timeout
+        )
+    except asyncio.TimeoutError:
+        logger.warning("Subprocess timed out after %ss: %s", timeout, cmd)
+        if proc.returncode is None:
+            proc.terminate()
+        try:
+            stdout, stderr = await asyncio.wait_for(communicate_task, timeout=5)
+        except asyncio.TimeoutError:
+            logger.warning("Subprocess did not terminate gracefully; killing: %s", cmd)
+            if proc.returncode is None:
+                proc.kill()
+            stdout, stderr = await communicate_task
+        proc.stdout, proc.stderr = stdout, stderr
+        raise
+    proc.stdout, proc.stderr = stdout, stderr
     return proc
 
 
@@ -121,14 +141,23 @@ async def execute_experiment(
         return ExperimentResult(status="FAILED", error=str(e))
 
     stdout = proc.stdout.decode().strip() if proc.stdout else ""
+    stderr = proc.stderr.decode().strip() if proc.stderr else ""
+
+    # Short-circuit on non-zero exit before JSON parsing
+    if proc.returncode != 0 and not stdout:
+        return ExperimentResult(
+            status="FAILED",
+            error=stderr[:500] or f"executor.sh exited with code {proc.returncode}",
+        )
 
     # Parse JSON output
     try:
         data = json.loads(stdout)
     except json.JSONDecodeError:
+        error_detail = stderr[:300] if stderr else stdout[:200]
         return ExperimentResult(
             status="FAILED",
-            error=f"Failed to parse executor output as JSON: {stdout[:200]}",
+            error=f"Failed to parse executor output: {error_detail}",
         )
 
     # Check for executor-reported errors

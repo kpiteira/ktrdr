@@ -74,12 +74,11 @@ def build_director_prompt(
         cadence: Current cadence mode (from last cycle's decision).
         nudges: Content of nudges.md (human feedback).
     """
-    charter = charter_path.read_text()
+    # Charter is already loaded by PersistentAgentSession.start() as the
+    # initial message. Don't duplicate it here — saves tokens each cycle.
 
     parts = [
         f"# Director — Cycle {iteration}",
-        "",
-        charter,
         "",
         "---",
         "",

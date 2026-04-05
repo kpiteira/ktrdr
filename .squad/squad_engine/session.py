@@ -101,28 +101,34 @@ class PersistentAgentSession:
 
         Creates a ClaudeSDKClient, connects, then sends the charter
         + history + any context files as the initial message.
+        Cleans up resources on failure to avoid env var and temp dir leaks.
         """
         if self._alive:
             logger.warning("Session %s already alive, skipping start", self.role)
             return
 
-        # Remove CLAUDECODE to prevent nested SDK blocking
-        self._saved_claudecode = os.environ.pop("CLAUDECODE", None)
+        try:
+            # Remove CLAUDECODE to prevent nested SDK blocking
+            self._saved_claudecode = os.environ.pop("CLAUDECODE", None)
 
-        # Create temp working dir to avoid mcp/ shadowing
-        self._work_dir = tempfile.TemporaryDirectory(prefix=f"squad-{self.role}-")
+            # Create temp working dir to avoid mcp/ shadowing
+            self._work_dir = tempfile.TemporaryDirectory(prefix=f"squad-{self.role}-")
 
-        self._client = self._create_client()
-        await self._client.connect()
-        self._alive = True
+            self._client = self._create_client()
+            await self._client.connect()
 
-        # Build initial context message
-        initial_msg = self._build_initial_message(context_files)
-        await self._client.query(initial_msg)
-        # Consume the response to the initial setup
-        await self._collect_response()
+            # Build initial context message
+            initial_msg = self._build_initial_message(context_files)
+            await self._client.query(initial_msg)
+            # Consume the response to the initial setup
+            await self._collect_response()
 
-        logger.info("Session %s started (model=%s)", self.role, self._model)
+            self._alive = True
+            logger.info("Session %s started (model=%s)", self.role, self._model)
+        except Exception:
+            # Clean up on partial init failure
+            await self._cleanup()
+            raise
 
     async def query(self, message: str) -> AgentResult:
         """Send a message and get a response. Multi-turn within the session."""
@@ -134,6 +140,16 @@ class PersistentAgentSession:
 
     async def stop(self) -> None:
         """Tear down the session. Handles CancelledError from disconnect()."""
+        await self._cleanup()
+        logger.info(
+            "Session %s stopped (cost=$%.4f, turns=%d)",
+            self.role,
+            self._total_cost_usd,
+            self._total_turns,
+        )
+
+    async def _cleanup(self) -> None:
+        """Clean up session resources (client, temp dir, env var)."""
         if self._client is not None:
             try:
                 await self._client.disconnect()
@@ -141,11 +157,10 @@ class PersistentAgentSession:
                 logger.debug("CancelledError on disconnect for %s (expected)", self.role)
             except Exception:
                 logger.exception("Error disconnecting session %s", self.role)
+            self._client = None
 
         self._alive = False
-        self._client = None
 
-        # Clean up temp dir
         if self._work_dir is not None:
             try:
                 self._work_dir.cleanup()
@@ -153,17 +168,9 @@ class PersistentAgentSession:
                 pass
             self._work_dir = None
 
-        # Restore CLAUDECODE env var
         if self._saved_claudecode is not None:
             os.environ["CLAUDECODE"] = self._saved_claudecode
             self._saved_claudecode = None
-
-        logger.info(
-            "Session %s stopped (cost=$%.4f, turns=%d)",
-            self.role,
-            self._total_cost_usd,
-            self._total_turns,
-        )
 
     def _create_client(self):
         """Create a ClaudeSDKClient with appropriate options.

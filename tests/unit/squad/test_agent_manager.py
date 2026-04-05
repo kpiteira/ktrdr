@@ -194,9 +194,11 @@ class TestAgentManager:
                 context=["knowledge/synthesis.md"],
             )
 
-        # Context files should be passed to start()
+        # Context files should be resolved and passed to start()
         start_call = mock_session.start.call_args
         assert start_call is not None
+        expected_path = str(context_loader.shared_dir / "knowledge/synthesis.md")
+        assert expected_path in start_call.kwargs.get("context_files", [])
 
     @pytest.mark.asyncio
     async def test_spawn_after_teardown_creates_fresh(
