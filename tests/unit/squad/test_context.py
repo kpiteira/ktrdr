@@ -75,9 +75,7 @@ class TestContextLoader:
 
     def test_load_files_returns_dict(self, kb_dir: Path):
         loader = ContextLoader(shared_dir=str(kb_dir))
-        result = loader.load_files(
-            ["knowledge/synthesis.md", "knowledge/decisions.md"]
-        )
+        result = loader.load_files(["knowledge/synthesis.md", "knowledge/decisions.md"])
         assert "knowledge/synthesis.md" in result
         assert "knowledge/decisions.md" in result
         assert "MLP is dead" in result["knowledge/decisions.md"]

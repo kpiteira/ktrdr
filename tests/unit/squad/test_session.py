@@ -220,9 +220,7 @@ class TestPersistentAgentSession:
             os.environ.pop("CLAUDECODE", None)
 
     @pytest.mark.asyncio
-    async def test_is_alive_reflects_state(
-        self, charter_file: Path, mock_session_env
-    ):
+    async def test_is_alive_reflects_state(self, charter_file: Path, mock_session_env):
         client, sdk, _ = mock_session_env
         session = PersistentAgentSession(
             role="engineer",

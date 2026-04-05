@@ -10,6 +10,7 @@ Python provides tool implementations but makes no routing decisions.
 
 from __future__ import annotations
 
+import json
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -19,7 +20,7 @@ from ktrdr.agents.runtime.protocol import AgentResult
 from squad_engine.agent_manager import AgentManager
 from squad_engine.context import ContextLoader
 from squad_engine.director_prompt import build_director_prompt
-from squad_engine.squad_tools import CycleState, create_squad_mcp_server
+from squad_engine.squad_tools import ConversationEntry, CycleState, create_squad_mcp_server
 
 logger = get_logger(__name__)
 
@@ -36,6 +37,8 @@ class CycleResult:
     cadence_next: str = "full_squad"
     error: str | None = None
     duration_seconds: float = 0.0
+    conversation_log: list[ConversationEntry] = field(default_factory=list)
+    director_transcript: list[dict] = field(default_factory=list)
 
 
 async def run_cycle(
@@ -65,7 +68,6 @@ async def run_cycle(
     agent_manager = _agent_manager or AgentManager(
         context_loader=context_loader,
         charter_dir=charter_base,
-        allowed_roles={"engineer", "scribe"},  # M1: only these two
     )
 
     # Read cycle context — default to full_squad if missing
@@ -119,7 +121,92 @@ async def run_cycle(
         result.duration_seconds,
         result.agents_spawned,
     )
+
+    # Write conversation log for review
+    _write_conversation_log(result, context_loader.shared_dir)
+
     return result
+
+
+def _write_conversation_log(result: CycleResult, shared_dir: Path) -> None:
+    """Write a human-readable conversation log for the cycle.
+
+    Written to {shared_dir}/logs/cycle_{iteration}_conversation.md
+    """
+    log_dir = shared_dir / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_path = log_dir / f"cycle_{result.iteration}_conversation.md"
+
+    lines = [
+        f"# Cycle {result.iteration} — Conversation Log",
+        "",
+        f"**Status:** {result.status}",
+        f"**Cost:** ${result.total_cost_usd:.4f}",
+        f"**Duration:** {result.duration_seconds:.1f}s",
+        f"**Agents spawned:** {', '.join(result.agents_spawned)}",
+        f"**Next cadence:** {result.cadence_next}",
+        "",
+        "---",
+        "",
+    ]
+
+    # Director's own reasoning (from transcript)
+    if result.director_transcript:
+        lines.append("## Director's Reasoning")
+        lines.append("")
+        for entry in result.director_transcript:
+            if entry.get("type") == "text":
+                lines.append(entry["content"])
+                lines.append("")
+            elif entry.get("type") == "tool_use":
+                tool = entry.get("tool", "unknown")
+                tool_input = entry.get("input", {})
+                if tool == "spawn_agent":
+                    role = tool_input.get("role", "?")
+                    msg_preview = tool_input.get("message", "")[:200]
+                    lines.append(f"**→ spawn_agent({role}):** {msg_preview}")
+                elif tool == "cycle_complete":
+                    cadence = tool_input.get("cadence", "?")
+                    reason = tool_input.get("reason", "")
+                    lines.append(f"**→ cycle_complete({cadence}):** {reason}")
+                else:
+                    lines.append(f"**→ {tool}:** {json.dumps(tool_input)[:200]}")
+                lines.append("")
+        lines.append("---")
+        lines.append("")
+
+    # Agent conversations
+    if result.conversation_log:
+        lines.append("## Agent Conversations")
+        lines.append("")
+        for i, entry in enumerate(result.conversation_log, 1):
+            lines.append(f"### Exchange {i}: Director → {entry.role.upper()}")
+            lines.append("")
+            lines.append(f"**Director asked** (${entry.cost_usd:.4f}, {entry.turns} turns):")
+            lines.append("")
+            lines.append(f"> {entry.message_to_agent}")
+            lines.append("")
+            lines.append(f"**{entry.role.upper()} responded:**")
+            lines.append("")
+            lines.append(entry.agent_response)
+            lines.append("")
+            lines.append("---")
+            lines.append("")
+
+    # Experiment results
+    if result.experiment_result:
+        lines.append("## Experiment Result")
+        lines.append("")
+        lines.append(f"```json\n{json.dumps(result.experiment_result, indent=2, default=str)}\n```")
+        lines.append("")
+
+    if result.error:
+        lines.append("## Error")
+        lines.append("")
+        lines.append(f"```\n{result.error}\n```")
+
+    log_path.write_text("\n".join(lines))
+    logger.info("Conversation log written to %s", log_path)
 
 
 async def _run_director_session(
@@ -165,12 +252,14 @@ async def _run_director_session(
         # Send the assembled prompt — the Director runs autonomously,
         # calling native tools and squad MCP tools as it sees fit.
         # The SDK dispatches tool calls; we just wait for completion.
-        await director.query(prompt)
+        director_result = await director.query(prompt)
 
         # Transfer cycle state to result
         result.agents_spawned = cycle_state.agents_spawned
         result.experiment_result = cycle_state.experiment_result
         result.cadence_next = cycle_state.cadence_next
+        result.conversation_log = cycle_state.conversation_log
+        result.director_transcript = director_result.transcript
 
         if cycle_state.cycle_complete:
             result.status = "COMPLETE"
