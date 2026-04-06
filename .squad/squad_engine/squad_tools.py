@@ -19,6 +19,17 @@ logger = get_logger(__name__)
 
 
 @dataclass
+class ConversationEntry:
+    """One exchange in the Director's conversation with an agent."""
+
+    role: str
+    message_to_agent: str
+    agent_response: str
+    cost_usd: float = 0.0
+    turns: int = 0
+
+
+@dataclass
 class CycleState:
     """Mutable state shared across tool calls within a single cycle.
 
@@ -30,6 +41,7 @@ class CycleState:
     experiment_result: dict | None = None
     cadence_next: str = "full_squad"
     cycle_complete: bool = False
+    conversation_log: list[ConversationEntry] = field(default_factory=list)
 
 
 def create_squad_mcp_server(
@@ -54,8 +66,10 @@ def create_squad_mcp_server(
             "Start a conversation with a squad agent or send a follow-up message. "
             "First call for a role creates a new session with the agent's charter and history. "
             "Subsequent calls continue the conversation (multi-turn). "
-            "Available roles for M1: engineer (designs strategies, writes YAML, evaluates results) "
-            "and scribe (records experiment results to knowledge base). "
+            "Available roles: engineer (designs strategies, writes YAML, evaluates results), "
+            "quant (cost/profitability analysis), inventor (divergent thinking, structural novelty), "
+            "scout (external research, literature), critic (statistical rigor, adversarial challenge), "
+            "architect (feasibility, capability gaps), scribe (records results to knowledge base). "
             "Returns the agent's response text."
         ),
         input_schema={
@@ -63,7 +77,7 @@ def create_squad_mcp_server(
             "properties": {
                 "role": {
                     "type": "string",
-                    "enum": ["engineer", "scribe"],
+                    "enum": ["engineer", "quant", "inventor", "scout", "critic", "architect", "scribe"],
                     "description": "Which agent to spawn or message",
                 },
                 "message": {
@@ -93,6 +107,15 @@ def create_squad_mcp_server(
 
         if role not in cycle_state.agents_spawned:
             cycle_state.agents_spawned.append(role)
+
+        # Record the full exchange for conversation review
+        cycle_state.conversation_log.append(ConversationEntry(
+            role=role,
+            message_to_agent=message,
+            agent_response=result.output,
+            cost_usd=result.cost_usd,
+            turns=result.turns,
+        ))
 
         return {
             "output": result.output,
