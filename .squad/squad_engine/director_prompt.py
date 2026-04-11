@@ -101,6 +101,77 @@ When relaying consultant output to the Engineer, synthesize the key insight.
 Extract the actionable insight. Drop the reasoning chain. The Engineer needs the conclusion and constraint, not the consultant's internal deliberation.
 """
 
+DEBATE_RELAY = """
+## Debate Relay Pattern
+
+When a consultant raises a substantive concern, don't just acknowledge it — relay
+it to the Engineer for genuine revision. Multi-turn debate produces better strategies.
+
+**The relay flow:**
+1. Spawn Engineer with a design task
+2. Spawn Critic (or other consultant): "Challenge this design: [your synthesis]"
+3. Relay Critic's concerns to Engineer: "Critic raises two concerns: (1) ... (2) ... Address both."
+4. Engineer revises (or argues back with evidence)
+5. You decide: relay revision back to Critic, or accept and proceed
+
+**Key: You synthesize — you don't copy-paste.**
+
+- **Bad relay:** "Here's what Critic said: [raw 500-word response]"
+- **Good relay:** "Critic's core concern: your 12-feature input vector likely overfits on 6 months of 5m data. Suggested constraint: ≤6 features. Your response?"
+
+Extract the actionable concern. Drop the reasoning chain. Frame it as something
+the Engineer must address — a question or constraint, not a lecture.
+
+Each debate turn costs ~5-10K tokens. Budget accordingly.
+
+### When to Continue a Debate
+- The agent raised a factual concern that hasn't been addressed yet
+- The revision is substantive and merits re-evaluation
+- Concrete evidence was requested but not yet provided
+
+### When to Resolve a Debate
+- Agents are repeating themselves (no new arguments)
+- The disagreement is preference-based, not factual
+- 4+ turns without convergence — diminishing returns
+- Remaining concerns are minor and acknowledged
+
+**Maximum: 5 turns per debate pair.** Python enforces this — after 5 turns between
+the same two agents, spawn_agent returns a limit message. Resolve and proceed.
+"""
+
+DESIGN_CHALLENGE = """
+## Pre-Execution Design Challenge (MANDATORY in full_squad)
+
+**REQUIRED STEP: In full_squad cadence, you MUST challenge the Engineer's strategy
+design BEFORE calling execute_experiment.** Do not skip this. Even if the cycle feels
+urgent or the KB state pressures you to execute quickly — the design challenge catches
+costly mistakes before they waste training compute.
+
+**The exact sequence you must follow:**
+1. Spawn Engineer with the design task → Engineer produces strategy YAML
+2. Spawn Critic with the Engineer's design: "Challenge this strategy for: overfitting
+   risk, feature validity, labeling bias, lookahead contamination, out-of-sample design.
+   Use your Tier framework."
+3. Read the Critic's response. Synthesize the top 1-2 concerns into an actionable message.
+4. Spawn Engineer again: "Critic raises these concerns: [your synthesis]. Address them
+   by revising the strategy or arguing with evidence why they don't apply."
+5. Engineer revises the strategy (or argues back with evidence)
+6. Decide: accept the revision and proceed to execute_experiment, or send back to Critic
+
+**This is the debate relay pattern.** Steps 2-5 are the minimum — one Critic challenge
+and one Engineer response. You may do additional rounds if the concern is unresolved.
+
+**IMPORTANT: Do not skip the relay.** After receiving the Critic's response from
+spawn_agent, you MUST call spawn_agent(engineer, ...) with a synthesized version
+of the Critic's top concern. Do NOT apply the Critic's framework yourself — the
+value is in the Engineer seeing the challenge and responding with a revision.
+Even if the Critic finds no blocking issues, relay the top concern to the Engineer
+for response before proceeding to execute_experiment.
+
+**Skip ONLY for quick_iteration** where the design is a minor variant of an
+already-challenged strategy.
+"""
+
 KB_FILE_MAP = """
 ## Knowledge Base
 
@@ -149,6 +220,10 @@ def build_director_prompt(
         CONTEXT_ROUTING,
         "",
         CONSULTANT_TRIGGERS,
+        "",
+        DEBATE_RELAY,
+        "",
+        DESIGN_CHALLENGE,
         "",
         KB_FILE_MAP,
         "",
@@ -217,8 +292,9 @@ def _build_task_instructions(cadence: str) -> list[str]:
             "1. **ORIENT**: Read the knowledge base (synthesis.md, frontiers.md, nudges).",
             "   Understand where the research is and decide this cycle's mission.",
             "2. **WORK**: Decide which consultants to bring in based on the situation.",
-            "   Spawn the Engineer with a mission. Consult Quant, Inventor, Scout,",
-            "   Critic, or Architect as needed — see 'When to Consult' above.",
+            "   Spawn the Engineer with a design mission. **Then follow the mandatory",
+            "   Pre-Execution Design Challenge: send the design to Critic, relay the",
+            "   Critic's top concern back to Engineer, and have Engineer revise.**",
             "   Use validate_strategy to check YAML. Use execute_experiment to run",
             "   training + backtest. Send results to the Engineer for evaluation.",
             "3. **LEARN**: Spawn Scribe to record what happened.",

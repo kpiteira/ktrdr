@@ -29,6 +29,9 @@ class ConversationEntry:
     turns: int = 0
 
 
+MAX_DEBATE_TURNS = 5
+
+
 @dataclass
 class CycleState:
     """Mutable state shared across tool calls within a single cycle.
@@ -42,6 +45,38 @@ class CycleState:
     cadence_next: str = "full_squad"
     cycle_complete: bool = False
     conversation_log: list[ConversationEntry] = field(default_factory=list)
+    debate_pairs: dict[tuple[str, str], int] = field(default_factory=dict)
+    debates: list[dict] = field(default_factory=list)
+    last_spawned_role: str | None = None
+
+    def _pair_key(self, role_a: str, role_b: str) -> tuple[str, str]:
+        """Sorted pair key so (A,B) == (B,A)."""
+        return tuple(sorted([role_a, role_b]))
+
+    def record_debate_turn(self, role_a: str, role_b: str) -> None:
+        """Record one turn in a debate between two roles."""
+        key = self._pair_key(role_a, role_b)
+        self.debate_pairs[key] = self.debate_pairs.get(key, 0) + 1
+
+    def is_debate_limit_reached(self, role_a: str, role_b: str) -> bool:
+        """Check if this debate pair has hit the 5-turn maximum."""
+        key = self._pair_key(role_a, role_b)
+        return self.debate_pairs.get(key, 0) >= MAX_DEBATE_TURNS
+
+    def record_debate(
+        self,
+        roles: list[str],
+        turns: int,
+        revised: bool,
+        resolution: str,
+    ) -> None:
+        """Record structured metadata for a completed debate."""
+        self.debates.append({
+            "roles": roles,
+            "turns": turns,
+            "revised": revised,
+            "resolution": resolution,
+        })
 
 
 def create_squad_mcp_server(
@@ -102,6 +137,28 @@ def create_squad_mcp_server(
         context = input.get("context")
 
         logger.info("Director spawning %s: %s", role, message[:100])
+
+        # Track debate turns between consecutive different roles
+        prev = cycle_state.last_spawned_role
+        if prev and prev != role:
+            # Check limit before spawning
+            if cycle_state.is_debate_limit_reached(prev, role):
+                logger.info(
+                    "Debate limit reached for %s ↔ %s (5 turns). Returning limit message.",
+                    prev, role,
+                )
+                cycle_state.last_spawned_role = role
+                return {
+                    "output": (
+                        f"Debate between {prev} and {role} reached the 5-turn limit. "
+                        "Please resolve the discussion and proceed."
+                    ),
+                    "cost_usd": 0.0,
+                    "turns": 0,
+                }
+            cycle_state.record_debate_turn(prev, role)
+
+        cycle_state.last_spawned_role = role
 
         result = await agent_manager.spawn_agent(role, message, context)
 

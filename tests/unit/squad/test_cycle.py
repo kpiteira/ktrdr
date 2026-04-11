@@ -391,11 +391,25 @@ class TestM2ConversationLog:
             ],
             director_transcript=[
                 {"role": "assistant", "type": "text", "content": "Reading KB state..."},
-                {"role": "assistant", "type": "tool_use", "tool": "spawn_agent",
-                 "input": {"role": "engineer", "message": "Design a GRU strategy"}, "id": "t1"},
-                {"role": "assistant", "type": "text", "content": "Engineer produced a design. Checking costs."},
-                {"role": "assistant", "type": "tool_use", "tool": "spawn_agent",
-                 "input": {"role": "quant", "message": "Check costs"}, "id": "t2"},
+                {
+                    "role": "assistant",
+                    "type": "tool_use",
+                    "tool": "spawn_agent",
+                    "input": {"role": "engineer", "message": "Design a GRU strategy"},
+                    "id": "t1",
+                },
+                {
+                    "role": "assistant",
+                    "type": "text",
+                    "content": "Engineer produced a design. Checking costs.",
+                },
+                {
+                    "role": "assistant",
+                    "type": "tool_use",
+                    "tool": "spawn_agent",
+                    "input": {"role": "quant", "message": "Check costs"},
+                    "id": "t2",
+                },
             ],
         )
 
@@ -432,13 +446,185 @@ class TestM2ConversationLog:
         assert "Challenge this RSI strategy design" in content
         assert "RSI period is too short" in content
 
+
+# ---------------------------------------------------------------------------
+# M3: Multi-Turn Debate Relay Pattern
+# ---------------------------------------------------------------------------
+
+
+class TestM3DebateRelayPattern:
+    """Director prompt includes debate relay pattern with good/bad examples."""
+
+    def _build_prompt(self, tmp_path, cadence="full_squad"):
+        charter = tmp_path / "charter.md"
+        charter.write_text("You are the Director.")
+        return build_director_prompt(
+            charter_path=charter,
+            iteration=1,
+            cadence=cadence,
+            nudges="",
+        )
+
+    def test_prompt_has_dedicated_debate_section(self, tmp_path: Path):
+        """Director prompt must have a section specifically about debate relay."""
+        prompt = self._build_prompt(tmp_path)
+        # Must have a debate-specific section header, not just M2's "Relay Pattern"
+        assert "Debate" in prompt, "Prompt should have a section about debate relay"
+
+    def test_prompt_describes_multi_turn_relay_flow(self, tmp_path: Path):
+        """Prompt describes the numbered debate flow: spawn Engineer, spawn Critic, relay back."""
+        prompt = self._build_prompt(tmp_path)
+        prompt_lower = prompt.lower()
+        # Should describe the back-and-forth pattern explicitly
+        assert "spawn" in prompt_lower
+        # Must mention relaying Critic's concerns back to Engineer
+        assert "concern" in prompt_lower or "challenge" in prompt_lower
+
+    def test_prompt_shows_debate_bad_relay_example(self, tmp_path: Path):
+        """Prompt shows a bad debate relay example (raw-forwarding a long response)."""
+        prompt = self._build_prompt(tmp_path)
+        # Should have a specific bad example for debate (not just M2's consultation relay)
+        # The debate bad example mentions raw forwarding of a long response
+        assert "500-word" in prompt or "raw" in prompt.lower()
+
+    def test_prompt_shows_debate_good_relay_example(self, tmp_path: Path):
+        """Prompt shows a good debate relay example (distilling the core concern)."""
+        prompt = self._build_prompt(tmp_path)
+        prompt_lower = prompt.lower()
+        # Good relay: Director extracts core concern and frames it as a question
+        assert "core concern" in prompt_lower or "overfit" in prompt_lower
+
+    def test_prompt_within_token_budget_with_debate(self, tmp_path: Path):
+        """Prompt with debate additions should still stay within token budget."""
+        prompt = self._build_prompt(tmp_path)
+        estimated_tokens = len(prompt) // 4
+        # Budget expanded slightly for debate content — but stay reasonable
+        assert estimated_tokens < 5000, f"Prompt too large: ~{estimated_tokens} tokens"
+
+
+# ---------------------------------------------------------------------------
+# M3: Debate Depth Control — Director Prompt Heuristics
+# ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
+# M3: Engineer ↔ Critic Design Challenge Pattern
+# ---------------------------------------------------------------------------
+
+
+class TestM3DesignChallenge:
+    """Director prompt includes pre-execution design challenge workflow."""
+
+    def _build_prompt(self, tmp_path, cadence="full_squad"):
+        charter = tmp_path / "charter.md"
+        charter.write_text("You are the Director.")
+        return build_director_prompt(
+            charter_path=charter,
+            iteration=1,
+            cadence=cadence,
+            nudges="",
+        )
+
+    def test_prompt_has_design_challenge_section(self, tmp_path: Path):
+        """Prompt must have a dedicated design challenge section."""
+        prompt = self._build_prompt(tmp_path)
+        assert "Design Challenge" in prompt or "design challenge" in prompt.lower()
+
+    def test_prompt_challenge_references_critic_tiers(self, tmp_path: Path):
+        """Challenge workflow should reference Critic's Tier 1/2/3 framework."""
+        prompt = self._build_prompt(tmp_path)
+        assert "Tier" in prompt or "tier" in prompt.lower()
+
+    def test_prompt_challenge_mentions_key_concerns(self, tmp_path: Path):
+        """Challenge should mention overfitting, lookahead, data leakage."""
+        prompt = self._build_prompt(tmp_path)
+        prompt_lower = prompt.lower()
+        found = sum(
+            1
+            for term in ["overfitting", "lookahead", "leakage"]
+            if term in prompt_lower
+        )
+        assert (
+            found >= 2
+        ), f"Expected at least 2 of [overfitting, lookahead, leakage], found {found}"
+
+    def test_prompt_challenge_is_pre_execution(self, tmp_path: Path):
+        """Challenge should happen before execute_experiment."""
+        prompt = self._build_prompt(tmp_path)
+        prompt_lower = prompt.lower()
+        assert "before" in prompt_lower
+        assert "execute" in prompt_lower or "execution" in prompt_lower
+
+    def test_prompt_challenge_default_for_full_squad(self, tmp_path: Path):
+        """Design challenge should be default for full_squad cadence."""
+        prompt = self._build_prompt(tmp_path, cadence="full_squad")
+        prompt_lower = prompt.lower()
+        assert "full_squad" in prompt_lower or "default" in prompt_lower
+
+    def test_prompt_challenge_skippable_for_quick_iteration(self, tmp_path: Path):
+        """Design challenge should be skippable for quick_iteration cadence."""
+        prompt = self._build_prompt(tmp_path)
+        prompt_lower = prompt.lower()
+        assert "quick_iteration" in prompt_lower
+        assert "skip" in prompt_lower
+
+
+class TestM3DebateDepthHeuristics:
+    """Director prompt includes when to continue/resolve debates."""
+
+    def _build_prompt(self, tmp_path, cadence="full_squad"):
+        charter = tmp_path / "charter.md"
+        charter.write_text("You are the Director.")
+        return build_director_prompt(
+            charter_path=charter,
+            iteration=1,
+            cadence=cadence,
+            nudges="",
+        )
+
+    def test_prompt_has_continue_heuristics(self, tmp_path: Path):
+        """Prompt describes when to continue a debate."""
+        prompt = self._build_prompt(tmp_path)
+        prompt_lower = prompt.lower()
+        assert "continue" in prompt_lower
+        # Should mention factual concerns or unaddressed points
+        assert (
+            "factual" in prompt_lower
+            or "addressed" in prompt_lower
+            or "unaddressed" in prompt_lower
+        )
+
+    def test_prompt_has_resolve_heuristics(self, tmp_path: Path):
+        """Prompt describes when to resolve/end a debate."""
+        prompt = self._build_prompt(tmp_path)
+        prompt_lower = prompt.lower()
+        assert "resolve" in prompt_lower or "stop" in prompt_lower
+        # Should mention repetition or preference-based disagreement
+        assert "repeating" in prompt_lower or "preference" in prompt_lower
+
+    def test_prompt_mentions_turn_limit(self, tmp_path: Path):
+        """Prompt warns about the 5-turn maximum enforced by Python."""
+        prompt = self._build_prompt(tmp_path)
+        assert "5" in prompt
+        # Should mention the limit is enforced
+        assert "limit" in prompt.lower() or "maximum" in prompt.lower()
+
+    def test_prompt_has_token_budget_guidance(self, tmp_path: Path):
+        """Prompt includes token cost guidance for debate turns."""
+        prompt = self._build_prompt(tmp_path)
+        # Should mention token cost per turn
+        assert "token" in prompt.lower() or "budget" in prompt.lower()
+
     def test_conversation_log_includes_director_reasoning(self, tmp_path: Path):
         """Log should include the Director's own text reasoning."""
         result = CycleResult(
             iteration=1,
             director_transcript=[
-                {"role": "assistant", "type": "text",
-                 "content": "Frontiers show 5m EURUSD is promising but costly. I'll consult Quant first."},
+                {
+                    "role": "assistant",
+                    "type": "text",
+                    "content": "Frontiers show 5m EURUSD is promising but costly. I'll consult Quant first.",
+                },
             ],
         )
 

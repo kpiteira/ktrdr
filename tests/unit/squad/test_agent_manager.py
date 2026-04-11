@@ -361,3 +361,132 @@ class TestM2AllRolesAvailable:
         mock_quant.stop.assert_awaited_once()
         mock_critic.stop.assert_awaited_once()
         assert len(manager.active_sessions) == 0
+
+
+# ---------------------------------------------------------------------------
+# M3: Multi-Turn Relay — Query Count Tracking
+# ---------------------------------------------------------------------------
+
+
+class TestM3QueryCountTracking:
+    """AgentManager tracks query count per role per cycle for debate depth control."""
+
+    @pytest.fixture
+    def full_kb_dir(self, tmp_path: Path) -> Path:
+        """Create KB + charter structure for all roles."""
+        squad_dir = tmp_path / "squad"
+        shared_dir = tmp_path / "shared"
+        for role in (
+            "engineer",
+            "critic",
+            "inventor",
+            "quant",
+            "scout",
+            "architect",
+            "scribe",
+        ):
+            agent_dir = squad_dir / "agents" / role
+            agent_dir.mkdir(parents=True)
+            (agent_dir / "charter.md").write_text(f"You are the {role}.")
+            history_dir = shared_dir / "agents" / role
+            history_dir.mkdir(parents=True)
+            (history_dir / "history.md").write_text(f"## {role} history")
+        return tmp_path
+
+    @pytest.fixture
+    def full_context_loader(self, full_kb_dir: Path) -> ContextLoader:
+        return ContextLoader(shared_dir=str(full_kb_dir / "shared"))
+
+    @pytest.mark.asyncio
+    async def test_query_counts_initialized_empty(
+        self, full_kb_dir, full_context_loader
+    ):
+        """Fresh AgentManager has empty query counts."""
+        manager = AgentManager(
+            context_loader=full_context_loader,
+            charter_dir=full_kb_dir / "squad" / "agents",
+        )
+        assert manager.query_counts == {}
+
+    @pytest.mark.asyncio
+    async def test_first_spawn_sets_count_to_one(
+        self, full_kb_dir, full_context_loader
+    ):
+        """First spawn_agent call for a role sets count to 1."""
+        manager = AgentManager(
+            context_loader=full_context_loader,
+            charter_dir=full_kb_dir / "squad" / "agents",
+        )
+        mock_session = _make_mock_session()
+
+        with patch(
+            "squad_engine.agent_manager.PersistentAgentSession",
+            return_value=mock_session,
+        ):
+            await manager.spawn_agent("engineer", "Design strategy")
+
+        assert manager.query_counts["engineer"] == 1
+
+    @pytest.mark.asyncio
+    async def test_subsequent_spawns_increment_count(
+        self, full_kb_dir, full_context_loader
+    ):
+        """Multiple spawn_agent calls for same role increment count."""
+        manager = AgentManager(
+            context_loader=full_context_loader,
+            charter_dir=full_kb_dir / "squad" / "agents",
+        )
+        mock_session = _make_mock_session()
+
+        with patch(
+            "squad_engine.agent_manager.PersistentAgentSession",
+            return_value=mock_session,
+        ):
+            await manager.spawn_agent("engineer", "First message")
+            await manager.spawn_agent("engineer", "Second message")
+            await manager.spawn_agent("engineer", "Third message")
+
+        assert manager.query_counts["engineer"] == 3
+
+    @pytest.mark.asyncio
+    async def test_different_roles_tracked_independently(
+        self, full_kb_dir, full_context_loader
+    ):
+        """Query counts are per-role, not global."""
+        manager = AgentManager(
+            context_loader=full_context_loader,
+            charter_dir=full_kb_dir / "squad" / "agents",
+        )
+        mock_eng = _make_mock_session()
+        mock_critic = _make_mock_session()
+        sessions = {"engineer": mock_eng, "critic": mock_critic}
+
+        with patch(
+            "squad_engine.agent_manager.PersistentAgentSession",
+            side_effect=lambda **kw: sessions[kw["role"]],
+        ):
+            await manager.spawn_agent("engineer", "Msg 1")
+            await manager.spawn_agent("engineer", "Msg 2")
+            await manager.spawn_agent("critic", "Challenge")
+
+        assert manager.query_counts["engineer"] == 2
+        assert manager.query_counts["critic"] == 1
+
+    @pytest.mark.asyncio
+    async def test_teardown_resets_query_counts(self, full_kb_dir, full_context_loader):
+        """teardown_all resets query counts for next cycle."""
+        manager = AgentManager(
+            context_loader=full_context_loader,
+            charter_dir=full_kb_dir / "squad" / "agents",
+        )
+        mock_session = _make_mock_session()
+
+        with patch(
+            "squad_engine.agent_manager.PersistentAgentSession",
+            return_value=mock_session,
+        ):
+            await manager.spawn_agent("engineer", "Work")
+            assert manager.query_counts["engineer"] == 1
+
+            await manager.teardown_all()
+            assert manager.query_counts == {}
