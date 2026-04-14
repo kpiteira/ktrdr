@@ -54,8 +54,8 @@ def should_trigger_synthesis(
         )
         return True
 
-    # Path 3: Periodic interval
-    if iteration > 0 and iteration % synthesis_interval == 0:
+    # Path 3: Periodic interval (disabled when synthesis_interval <= 0)
+    if synthesis_interval > 0 and iteration > 0 and iteration % synthesis_interval == 0:
         logger.info("Periodic synthesis at iteration %d", iteration)
         return True
 
@@ -84,7 +84,7 @@ async def run_synthesis_cycle(
             experiments_content = experiments_file.read_text()
 
     try:
-        synthesis_output = await _run_scribe_session(
+        synthesis_output, scribe_cost = await _run_scribe_session(
             experiments_content=experiments_content,
             charter_dir=charter_dir,
         )
@@ -100,6 +100,7 @@ async def run_synthesis_cycle(
             status="COMPLETE",
             agents_spawned=["scribe"],
             cadence_next="full_squad",  # Reset — prevent synthesis loop
+            total_cost_usd=scribe_cost,
             duration_seconds=time.time() - start_time,
         )
 
@@ -117,11 +118,11 @@ async def run_synthesis_cycle(
 async def _run_scribe_session(
     experiments_content: str,
     charter_dir: str | None = None,
-) -> str:
+) -> tuple[str, float]:
     """Run Scribe to produce synthesis.md from experiments.
 
     In production, this creates a PersistentAgentSession for the Scribe.
-    Returns the synthesis text.
+    Returns (synthesis_text, cost_usd).
     """
     from squad_engine.session import PersistentAgentSession
 
@@ -141,6 +142,6 @@ async def _run_scribe_session(
             f"## Experiment History\n\n{experiments_content}"
         )
         result = await scribe.query(prompt)
-        return result.output
+        return result.output, scribe.total_cost_usd
     finally:
         await scribe.stop()

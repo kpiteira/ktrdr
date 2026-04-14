@@ -15,10 +15,11 @@ from pathlib import Path
 from ktrdr import get_logger
 from squad_engine.cadence import (
     read_cadence,
+    read_iteration_count,
     write_cadence,
     write_iteration_count,
 )
-from squad_engine.context import CHARS_PER_TOKEN
+from squad_engine.context import CHARS_PER_TOKEN, DEFAULT_SHARED_DIR
 from squad_engine.loop import CycleResult, run_cycle
 from squad_engine.stall import (
     CycleHistoryEntry,
@@ -65,14 +66,17 @@ async def run_loop(
 
     Returns LoopResult with aggregate stats.
     """
-    shared_path = Path(shared_dir) if shared_dir else None
+    shared_path = Path(shared_dir) if shared_dir else Path(DEFAULT_SHARED_DIR)
     result = LoopResult()
     stall_detector = StallDetector(max_non_productive=3)
 
+    # Resume from last iteration count for cross-run continuity
+    start_iteration = read_iteration_count(shared_path) + 1
+
     try:
-        for iteration in range(1, max_iterations + 1):
+        for iteration in range(start_iteration, start_iteration + max_iterations):
             # 1. Read cadence
-            cadence = read_cadence(shared_path) if shared_path else "full_squad"
+            cadence = read_cadence(shared_path)
 
             # Check for pause
             if cadence == "pause":
@@ -111,30 +115,28 @@ async def run_loop(
                 result.experiments_completed += 1
 
             # 5. Write cycle history
-            if shared_path:
-                _write_history(shared_path, cycle_result)
+            _write_history(shared_path, cycle_result)
 
             # 6. Check stall detection
             productive = is_productive_cycle(cycle_result)
             if stall_detector.check_stall(productive):
                 reason = f"{stall_detector.consecutive_non_productive} consecutive non-productive cycles"
-                if shared_path:
-                    write_fatal_error(shared_path, reason)
+                write_fatal_error(shared_path, reason)
                 result.status = "stalled"
                 result.stall_detected = True
                 logger.warning("Loop stalled at iteration %d: %s", iteration, reason)
                 break
 
             # 7. Write cadence from cycle result for next iteration
-            if shared_path:
-                write_cadence(shared_path, cycle_result.cadence_next)
-                write_iteration_count(shared_path, iteration)
+            write_cadence(shared_path, cycle_result.cadence_next)
+            write_iteration_count(shared_path, iteration)
 
             result.final_cadence = cycle_result.cadence_next
 
             logger.info(
-                "Iteration %d/%d complete (cadence_next=%s, cost=$%.4f)",
+                "Iteration %d complete (%d of %d in this run, cadence_next=%s, cost=$%.4f)",
                 iteration,
+                result.iterations_run,
                 max_iterations,
                 cycle_result.cadence_next,
                 cycle_result.total_cost_usd,
@@ -150,11 +152,8 @@ async def run_loop(
     return result
 
 
-def _estimate_context_tokens(shared_path: Path | None) -> int:
+def _estimate_context_tokens(shared_path: Path) -> int:
     """Estimate current context size from KB files."""
-    if not shared_path:
-        return 0
-
     experiments_file = shared_path / "knowledge" / "experiments.md"
     if not experiments_file.exists():
         return 0

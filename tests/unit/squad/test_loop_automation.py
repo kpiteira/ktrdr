@@ -145,7 +145,7 @@ class TestRunLoop:
     async def test_max_iterations_exits(self, tmp_path: Path):
         """Loop should exit after max_iterations."""
         from squad_engine.loop import CycleResult
-        from squad_engine.loop_runner import LoopResult, run_loop
+        from squad_engine.loop_runner import run_loop
 
         shared_dir = tmp_path / "shared"
         self._setup_shared_dir(shared_dir)
@@ -195,7 +195,7 @@ class TestRunLoop:
             new_callable=AsyncMock,
             return_value=mock_cycle,
         ) as mock_research:
-            result = await run_loop(
+            await run_loop(
                 shared_dir=str(shared_dir),
                 charter_dir=str(tmp_path / "charters"),
                 max_iterations=1,
@@ -236,7 +236,6 @@ class TestRunLoop:
     @pytest.mark.asyncio
     async def test_cadence_from_cycle_result_updates_file(self, tmp_path: Path):
         """Cadence from CycleResult should be written for next iteration."""
-        from squad_engine.cadence import read_cadence
         from squad_engine.loop import CycleResult
         from squad_engine.loop_runner import run_loop
 
@@ -404,7 +403,7 @@ class TestSynthesisCycle:
         with patch(
             "squad_engine.synthesis._run_scribe_session",
             new_callable=AsyncMock,
-            return_value="Updated synthesis of patterns...",
+            return_value=("Updated synthesis of patterns...", 0.50),
         ) as mock_scribe:
             result = await run_synthesis_cycle(
                 iteration=5,
@@ -428,7 +427,7 @@ class TestSynthesisCycle:
         with patch(
             "squad_engine.synthesis._run_scribe_session",
             new_callable=AsyncMock,
-            return_value="Synthesis output",
+            return_value=("Synthesis output", 0.50),
         ):
             result = await run_synthesis_cycle(
                 iteration=5,
@@ -452,7 +451,7 @@ class TestSynthesisCycle:
         with patch(
             "squad_engine.synthesis._run_scribe_session",
             new_callable=AsyncMock,
-            return_value="New synthesis with patterns",
+            return_value=("New synthesis with patterns", 0.50),
         ):
             await run_synthesis_cycle(
                 iteration=5,
@@ -571,22 +570,22 @@ class TestStallDetection:
     """Detect non-productive cycles and stop the loop."""
 
     def test_no_experiment_is_non_productive(self):
-        from squad_engine.stall import is_productive_cycle
         from squad_engine.loop import CycleResult
+        from squad_engine.stall import is_productive_cycle
 
         cycle = CycleResult(iteration=1, status="COMPLETE", experiment_result=None)
         assert not is_productive_cycle(cycle)
 
     def test_failed_cycle_is_non_productive(self):
-        from squad_engine.stall import is_productive_cycle
         from squad_engine.loop import CycleResult
+        from squad_engine.stall import is_productive_cycle
 
         cycle = CycleResult(iteration=1, status="FAILED")
         assert not is_productive_cycle(cycle)
 
     def test_experiment_completed_is_productive(self):
-        from squad_engine.stall import is_productive_cycle
         from squad_engine.loop import CycleResult
+        from squad_engine.stall import is_productive_cycle
 
         cycle = CycleResult(
             iteration=1,
@@ -655,7 +654,11 @@ class TestCycleHistory:
     """Cycle history JSON log."""
 
     def test_write_and_read_history(self, tmp_path: Path):
-        from squad_engine.stall import CycleHistoryEntry, read_cycle_history, write_cycle_history_entry
+        from squad_engine.stall import (
+            CycleHistoryEntry,
+            read_cycle_history,
+            write_cycle_history_entry,
+        )
 
         (tmp_path / "loop").mkdir(parents=True)
 
@@ -675,7 +678,11 @@ class TestCycleHistory:
         assert history[0]["experiment"] == "gru_eurusd_5m"
 
     def test_append_multiple_entries(self, tmp_path: Path):
-        from squad_engine.stall import CycleHistoryEntry, read_cycle_history, write_cycle_history_entry
+        from squad_engine.stall import (
+            CycleHistoryEntry,
+            read_cycle_history,
+            write_cycle_history_entry,
+        )
 
         (tmp_path / "loop").mkdir(parents=True)
 

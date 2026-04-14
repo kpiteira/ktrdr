@@ -22,7 +22,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--synthesis-interval", type=int, default=10,
-        help="Run synthesis every N cycles (default: 10)",
+        help="Run synthesis every N cycles (default: 10, 0 to disable periodic synthesis)",
     )
     parser.add_argument(
         "--shared-dir", type=str, default=None,
