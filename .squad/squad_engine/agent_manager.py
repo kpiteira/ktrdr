@@ -37,10 +37,16 @@ class AgentManager:
         self._charter_dir = charter_dir or Path(__file__).resolve().parent.parent / "agents"
         self._allowed_roles = allowed_roles or ALL_ROLES
         self._sessions: dict[str, PersistentAgentSession] = {}
+        self._query_counts: dict[str, int] = {}
 
     @property
     def active_sessions(self) -> dict[str, PersistentAgentSession]:
         return dict(self._sessions)
+
+    @property
+    def query_counts(self) -> dict[str, int]:
+        """Query count per role in this cycle. Used for debate depth control."""
+        return dict(self._query_counts)
 
     @property
     def total_cost_usd(self) -> float:
@@ -76,6 +82,8 @@ class AgentManager:
             await session.start(context_files=context_paths)
             logger.info("Spawned new session for %s", role)
 
+        self._query_counts[role] = self._query_counts.get(role, 0) + 1
+
         session = self._sessions[role]
         return await session.query(message)
 
@@ -88,6 +96,7 @@ class AgentManager:
                 logger.exception("Error tearing down %s session", role)
 
         self._sessions.clear()
+        self._query_counts.clear()
         logger.info("All sessions torn down")
 
     def _create_session(self, role: str) -> PersistentAgentSession:

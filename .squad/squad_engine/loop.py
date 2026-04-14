@@ -43,6 +43,7 @@ class CycleResult:
     duration_seconds: float = 0.0
     conversation_log: list[ConversationEntry] = field(default_factory=list)
     director_transcript: list[dict] = field(default_factory=list)
+    debates: list[dict] = field(default_factory=list)
 
 
 async def run_cycle(
@@ -271,6 +272,7 @@ async def _run_director_session(
         result.cadence_next = cycle_state.cadence_next
         result.conversation_log = cycle_state.conversation_log
         result.director_transcript = director_result.transcript
+        result.debates = cycle_state.debates
 
         if cycle_state.cycle_complete:
             result.status = "COMPLETE"
