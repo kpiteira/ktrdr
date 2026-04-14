@@ -8,11 +8,15 @@ reuse the existing session (multi-turn within a cycle).
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from ktrdr import get_logger
 from ktrdr.agents.runtime.protocol import AgentResult
 from squad_engine.context import ContextLoader
 from squad_engine.session import PersistentAgentSession
+
+if TYPE_CHECKING:
+    from squad_engine.transcript import TranscriptLogger
 
 logger = get_logger(__name__)
 
@@ -32,7 +36,7 @@ class AgentManager:
         context_loader: ContextLoader,
         charter_dir: Path | None = None,
         allowed_roles: set[str] | None = None,
-        transcript_logger: "TranscriptLogger | None" = None,
+        transcript_logger: TranscriptLogger | None = None,
     ) -> None:
         self._context_loader = context_loader
         self._charter_dir = charter_dir or Path(__file__).resolve().parent.parent / "agents"

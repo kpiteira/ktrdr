@@ -16,9 +16,13 @@ import asyncio
 import os
 import tempfile
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from ktrdr import get_logger
 from ktrdr.agents.runtime.protocol import AgentResult
+
+if TYPE_CHECKING:
+    from squad_engine.transcript import TranscriptLogger
 
 logger = get_logger(__name__)
 
@@ -70,7 +74,7 @@ class PersistentAgentSession:
         history_path: Path | None = None,
         model: str = DEFAULT_MODEL,
         mcp_servers: dict | None = None,
-        transcript_logger: "TranscriptLogger | None" = None,
+        transcript_logger: TranscriptLogger | None = None,
     ) -> None:
         self.role = role
         self._charter_path = charter_path

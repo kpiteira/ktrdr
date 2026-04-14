@@ -12,9 +12,13 @@ from __future__ import annotations
 
 import time
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from ktrdr import get_logger
 from squad_engine.context import CONTEXT_BUDGET_TOKENS, EMERGENCY_THRESHOLD
+
+if TYPE_CHECKING:
+    from squad_engine.loop import CycleResult
 
 logger = get_logger(__name__)
 
@@ -62,7 +66,7 @@ async def run_synthesis_cycle(
     iteration: int,
     shared_dir: str | None = None,
     charter_dir: str | None = None,
-) -> "CycleResult":
+) -> CycleResult:
     """Run a synthesis cycle — Scribe produces updated synthesis.md.
 
     Unlike research cycles, this spawns only the Scribe with the full

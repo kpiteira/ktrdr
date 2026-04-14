@@ -119,10 +119,10 @@ async def run_cycle(
         result.status = "FAILED"
         result.error = str(e)
     finally:
+        # Read agent costs BEFORE teardown (teardown clears session dict)
+        result.total_cost_usd += agent_manager.total_cost_usd
         # Always tear down agent sessions
         await agent_manager.teardown_all()
-        # Add agent costs to Director cost
-        result.total_cost_usd += agent_manager.total_cost_usd
         result.duration_seconds = time.time() - start_time
 
     logger.info(

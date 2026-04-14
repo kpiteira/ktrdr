@@ -8,18 +8,17 @@ Entry point: run_loop() or `python -m squad_engine.loop_runner`
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
 from ktrdr import get_logger
 from squad_engine.cadence import (
     read_cadence,
-    read_iteration_count,
     write_cadence,
     write_iteration_count,
 )
-from squad_engine.context import CHARS_PER_TOKEN, ContextLoader
+from squad_engine.context import CHARS_PER_TOKEN
 from squad_engine.loop import CycleResult, run_cycle
 from squad_engine.stall import (
     CycleHistoryEntry,
