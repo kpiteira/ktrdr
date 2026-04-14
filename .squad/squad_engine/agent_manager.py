@@ -32,10 +32,12 @@ class AgentManager:
         context_loader: ContextLoader,
         charter_dir: Path | None = None,
         allowed_roles: set[str] | None = None,
+        transcript_logger: "TranscriptLogger | None" = None,
     ) -> None:
         self._context_loader = context_loader
         self._charter_dir = charter_dir or Path(__file__).resolve().parent.parent / "agents"
         self._allowed_roles = allowed_roles or ALL_ROLES
+        self._transcript_logger = transcript_logger
         self._sessions: dict[str, PersistentAgentSession] = {}
         self._query_counts: dict[str, int] = {}
 
@@ -108,4 +110,5 @@ class AgentManager:
             role=role,
             charter_path=charter_path,
             history_path=history_path if history_path.exists() else None,
+            transcript_logger=self._transcript_logger,
         )

@@ -25,6 +25,7 @@ from squad_engine.squad_tools import (
     CycleState,
     create_squad_mcp_server,
 )
+from squad_engine.transcript import TranscriptLogger
 
 logger = get_logger(__name__)
 
@@ -70,9 +71,14 @@ async def run_cycle(
         Path(__file__).resolve().parent.parent / "agents"
     )
 
+    # Transcript logging — every turn of every session persisted
+    transcript_dir = context_loader.shared_dir / "loop" / "transcripts"
+    transcript_logger = TranscriptLogger(transcript_dir)
+
     agent_manager = _agent_manager or AgentManager(
         context_loader=context_loader,
         charter_dir=charter_base,
+        transcript_logger=transcript_logger,
     )
 
     # Read cycle context — default to full_squad if missing
@@ -105,6 +111,7 @@ async def run_cycle(
             await _run_director_session(
                 director_prompt, agent_manager, context_loader, result,
                 charter_base=charter_base,
+                transcript_logger=transcript_logger,
             )
 
     except Exception as e:
@@ -227,6 +234,7 @@ async def _run_director_session(
     context_loader: ContextLoader,
     result: CycleResult,
     charter_base: Path | None = None,
+    transcript_logger: TranscriptLogger | None = None,
 ) -> None:
     """Run the Director as a Claude Code session with squad MCP tools.
 
@@ -244,10 +252,11 @@ async def _run_director_session(
     # Create mutable cycle state that squad tools update
     cycle_state = CycleState()
 
-    # Create MCP server with squad tools
+    # Create MCP server with squad tools (with transcript logging)
     squad_mcp = create_squad_mcp_server(
         agent_manager=agent_manager,
         cycle_state=cycle_state,
+        transcript_logger=transcript_logger,
     )
 
     charter_dir = charter_base or Path(__file__).resolve().parent.parent / "agents"
@@ -256,6 +265,7 @@ async def _run_director_session(
         role="director",
         charter_path=director_charter,
         mcp_servers={"squad": squad_mcp},
+        transcript_logger=transcript_logger,
     )
 
     try:
