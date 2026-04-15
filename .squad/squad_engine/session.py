@@ -16,9 +16,13 @@ import asyncio
 import os
 import tempfile
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from ktrdr import get_logger
 from ktrdr.agents.runtime.protocol import AgentResult
+
+if TYPE_CHECKING:
+    from squad_engine.transcript import TranscriptLogger
 
 logger = get_logger(__name__)
 
@@ -70,16 +74,19 @@ class PersistentAgentSession:
         history_path: Path | None = None,
         model: str = DEFAULT_MODEL,
         mcp_servers: dict | None = None,
+        transcript_logger: TranscriptLogger | None = None,
     ) -> None:
         self.role = role
         self._charter_path = charter_path
         self._history_path = history_path
         self._model = model
         self._mcp_servers = mcp_servers
+        self._transcript_logger = transcript_logger
         self._client = None
         self._alive = False
         self._total_cost_usd = 0.0
         self._total_turns = 0
+        self._query_count = 0
         self._session_id: str | None = None
         self._saved_claudecode: str | None = None
         self._work_dir: tempfile.TemporaryDirectory | None = None
@@ -135,8 +142,22 @@ class PersistentAgentSession:
         if not self._alive or self._client is None:
             raise RuntimeError(f"Session {self.role} is not alive. Call start() first.")
 
+        self._query_count += 1
         await self._client.query(message)
-        return await self._collect_response()
+        result = await self._collect_response()
+
+        # Log every exchange to transcript
+        if self._transcript_logger:
+            self._transcript_logger.log_exchange(
+                role=self.role,
+                query_num=self._query_count,
+                query=message,
+                transcript=result.transcript,
+                cost_usd=result.cost_usd,
+                turns=result.turns,
+            )
+
+        return result
 
     async def stop(self) -> None:
         """Tear down the session. Handles CancelledError from disconnect()."""

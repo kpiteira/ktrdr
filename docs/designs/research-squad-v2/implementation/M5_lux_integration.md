@@ -11,7 +11,32 @@ architecture: docs/designs/research-squad-v2/ARCHITECTURE.md
 
 **Prerequisite:** M4 complete (full loop automation working)
 
-**Scope:** Integration layer between Lux and the squad orchestrator. No changes to orchestrator internals. Research-first tasks — Lux's capability interface may evolve.
+**Scope:** Integration layer between Lux and the squad orchestrator, plus critical squad quality fixes surfaced by M4 validation. Research-first tasks — Lux's capability interface may evolve.
+
+---
+
+## Pre-requisite Fixes (from M4 Validation)
+
+M4 validation (2 real cycles, 2026-04-14) exposed operational issues that must be fixed before Lux can meaningfully steer the squad. These aren't Lux-specific bugs — they affect all squad runs — but they're blocking for autonomous operation.
+
+### Fix A: Nudge Expiry / Arc Scoping
+**Problem:** Nudges from prior research arcs carry forward indefinitely. During M4 validation, the Director treated a stale nudge ("Do NOT pause before cycle 5" from a previous arc) as active orders, overriding valid Critic pushback to force-execute a low-value experiment. The entire cycle's strategic direction was shaped by stale context.
+
+**Impact on M5:** If Lux writes nudges to steer the squad, stale nudges from prior Lux-initiated runs will compound. Lux's steering input becomes noise rather than signal.
+
+**Fix:** Either (a) nudges require a `date:` and `arc:` header that the Director checks before treating as active, or (b) the loop clears nudges at the start of a new arc, or (c) the Director prompt instructs it to evaluate nudge freshness against the current research context.
+
+### Fix B: Inventor Consultation Ordering
+**Problem:** In full_squad mode, the Director broadcasts to all agents in parallel with the same brief. The Inventor reacts to the Director's pre-chosen direction instead of proposing alternatives. During validation, the Architect independently discovered a zero-code F2 path (CFTC COT data) — exactly the creative contribution the Inventor should have surfaced first.
+
+**Impact on M5:** If Lux expects the squad to explore novel directions, the current pattern means the Inventor is structurally unable to influence strategy selection.
+
+**Fix:** Director charter update — staged consultation for full_squad: Inventor first ("here's the frontier, what should we try?"), then Architect/Scout for feasibility, then Critic to challenge, then Engineer to build.
+
+### Fix C: cycle_complete Semantics
+**Problem:** Director called `cycle_complete` twice — once after planning, then continued executing the experiment and called it again with results. The loop used the last call, but the intent is confused.
+
+**Fix:** Director charter clarification — `cycle_complete` is a terminal action. Once called, the Director should not continue spawning agents or executing experiments.
 
 ---
 

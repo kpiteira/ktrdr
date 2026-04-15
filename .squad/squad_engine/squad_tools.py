@@ -82,6 +82,7 @@ class CycleState:
 def create_squad_mcp_server(
     agent_manager: Any,
     cycle_state: CycleState,
+    transcript_logger: Any | None = None,
 ):
     """Create an MCP server with squad tools for the Director.
 
@@ -174,11 +175,16 @@ def create_squad_mcp_server(
             turns=result.turns,
         ))
 
-        return {
+        output = {
             "output": result.output,
             "cost_usd": result.cost_usd,
             "turns": result.turns,
         }
+        if transcript_logger:
+            transcript_logger.log_tool_call(
+                "spawn_agent", {"role": role, "message": message[:200]}, output
+            )
+        return output
 
     # --- validate_strategy tool ---
 
@@ -206,7 +212,10 @@ def create_squad_mcp_server(
         logger.info("Director validating strategy: %s", name)
 
         result = await validate_strategy(name)
-        return {"valid": result.valid, "error": result.error}
+        output = {"valid": result.valid, "error": result.error}
+        if transcript_logger:
+            transcript_logger.log_tool_call("validate_strategy", {"name": name}, output)
+        return output
 
     # --- execute_experiment tool ---
 
@@ -266,6 +275,10 @@ def create_squad_mcp_server(
             "backtest": result.backtest,
             "error": result.error,
         }
+        if transcript_logger:
+            transcript_logger.log_tool_call(
+                "execute_experiment", {"strategy": strategy}, cycle_state.experiment_result
+            )
         return cycle_state.experiment_result
 
     # --- cycle_complete tool ---
@@ -300,7 +313,10 @@ def create_squad_mcp_server(
             input["cadence"],
             input.get("reason", ""),
         )
-        return {"status": "complete", "next_cadence": input["cadence"]}
+        output = {"status": "complete", "next_cadence": input["cadence"]}
+        if transcript_logger:
+            transcript_logger.log_tool_call("cycle_complete", input, output)
+        return output
 
     # Bundle into MCP server
     return sdk.create_sdk_mcp_server(
