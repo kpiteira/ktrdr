@@ -2,7 +2,7 @@
 
 > **Author**: Claude (Opus 4.6), commissioned by Karl Piteira
 > **Date**: 2026-04-18
-> **Status**: Draft v3 — fixes applied for IV metric consistency, backtest/live validation gap, SPY model prerequisite, label frequency calibration
+> **Status**: Draft v4 — fixes applied for problem statement accuracy (ktrdr as research system on forex, not profitable trading system on stocks), equity options (SPY) as target instrument, SPY model training hardened into M1
 > **Grounded in**: ktrdr codebase analysis (`KTRDR_REALITY_MAP.md`), Kronos integration spec (`spec.md`)
 
 ---
@@ -11,18 +11,29 @@
 
 ### What Problem Does This Solve?
 
-Karl has a working directional trading system (ktrdr) with a Sharpe ratio ceiling of 0.181. The system uses hand-crafted technical indicators passed through fuzzy membership functions into a neural network to produce BUY/SELL/HOLD signals. This signal is accurate enough to be profitable on stocks but not enough to justify the capital commitment at meaningful scale.
+ktrdr is a **strategy research system** — not a live trading system. It explores and validates directional trading strategies on **forex pairs** (EUR/USD, GBP/USD, etc.) using a pipeline of technical indicators, fuzzy membership functions, and neural networks (MLP/LSTM/GRU) to produce BUY/SELL/HOLD signals. The pipeline: OHLCV → IndicatorEngine → FuzzyEngine → FuzzyNeuralProcessor → neural network → softmax over {BUY, HOLD, SELL}. ktrdr has **no live trading history** and is **not profitable** — internal validation runs show a Sharpe of approximately 0.181 (from training-period validation, not an independent out-of-sample backtest), a research-grade result that demonstrates directional signal content but not a deployable edge on linear instruments.
 
-**The core insight**: A directional signal with 55-65% accuracy produces mediocre returns on linear stock trades, but the same signal routed through options structures generates asymmetric payoffs. A correct BUY signal that triggers buying a call spread pays 2-5x the risk, while an incorrect signal loses only the premium. Combined with a vol regime signal (from Kronos) that informs *which* options structure to use, the system can match structure to market conditions rather than applying one-size-fits-all directional bets.
+**The opportunity**: ktrdr's backtested directional signals can be extended to **equity options trading**, where options provide asymmetric payoff profiles that can amplify edge even with modest directional accuracy. A correct BUY signal that triggers buying a call spread pays 2-5x the risk, while an incorrect signal loses only the premium paid. Combined with a vol regime signal (from Kronos) that informs *which* options structure to use, the system can match structure to market conditions rather than applying one-size-fits-all directional bets.
+
+**The gap being filled**: ktrdr generates research-grade directional signals but cannot execute or capitalize on them. This system bridges that gap by:
+
+1. Training a new ktrdr model on **SPY** equity data using the same fuzzy-neural pipeline (M1) — transferring the signal methodology from forex to equities
+2. Adding Kronos vol regime classification to determine whether implied volatility is rich or cheap (M1)
+3. Building a Black-Scholes options pricing engine for synthetic backtesting (M2)
+4. Backtesting the full system on SPY options using the decision matrix (M3)
+5. Adding Opus 4.7 reasoning for live trade structure selection and portfolio construction (M4)
+6. Paper trading via IBKR to validate the end-to-end system with real options chains (M5)
+
+**Why equity options, not forex options**: ktrdr's existing models are trained on forex, but the target instrument for this system is **equity options** (SPY as primary underlying). Forex options are OTC, illiquid, and have limited IBKR support — they are explicitly out of scope. Equity options (SPY, etc.) are exchange-traded, liquid, and fully supported by IBKR's API. ktrdr's directional signal methodology transfers to SPY via a new model trained on SPY/equity OHLCV data using the same pipeline.
 
 ### What Does Success Look Like?
 
 | Milestone | Metric | Timeline |
 |-----------|--------|----------|
-| Vol regime signal validates | Kronos classifier AUC > 0.60 on held-out IV data | Phase 1 (weeks 1-2) |
-| Synthetic backtest shows edge | Combined system Sharpe > 0.50 on 2-year synthetic options backtest | Phase 2 (weeks 3-5) |
-| Paper trading confirms | Paper Sharpe > 0.40 over 60+ trading days with > 30 trades | Phase 3 (months 2-4) |
-| Live deployment | Sharpe > 0.35 on real capital, max drawdown < 15% | Phase 4 (month 5+) |
+| M1: SPY model + Vol regime signal validates | ktrdr SPY model trained; Kronos classifier AUC > 0.60 on held-out IV data | Phase 1 (weeks 1-2) |
+| M2: Synthetic backtest shows edge | Combined system Sharpe > 0.50 on 2-year synthetic options backtest | Phase 2 (weeks 3-5) |
+| M3: Paper trading confirms | Paper Sharpe > 0.40 over 60+ trading days with > 30 trades | Phase 3 (months 2-4) |
+| M4: Live deployment | Sharpe > 0.35 on real capital, max drawdown < 15% | Phase 4 (month 5+) |
 
 **The Sharpe targets are deliberately conservative**. A Sharpe of 0.50 on synthetic backtest with Black-Scholes reconstruction has known approximation errors (see Section 5); paper trading at 0.40 accounts for real-world slippage. If these targets are met, the system has genuine edge.
 
@@ -34,6 +45,7 @@ Karl has a working directional trading system (ktrdr) with a Sharpe ratio ceilin
 - **Fully automated execution without human oversight**: Lux recommends trades and can paper-trade autonomously, but live execution requires Karl's approval until paper trading validates the system.
 - **Multi-asset portfolio optimization**: Single-name options on one ticker at a time. Portfolio-level correlation management is out of scope.
 - **Replacing ktrdr's core ML pipeline**: The options layer sits *on top of* ktrdr's existing signal. Phase 1 of Kronos integration (replacing fuzzy features) is specced separately.
+- **Forex options**: OTC, illiquid, limited IBKR support. This system targets exchange-traded equity options only.
 
 ---
 
@@ -88,7 +100,7 @@ Karl has a working directional trading system (ktrdr) with a Sharpe ratio ceilin
 | Component | Responsibility |
 |-----------|---------------|
 | **Lux** | Orchestrates the entire flow: polls ktrdr, runs Kronos, calls Opus 4.7, manages positions, reports via Telegram |
-| **ktrdr REST API** | Produces directional signal (BUY/SELL/HOLD + probability distribution) from existing trained models |
+| **ktrdr REST API** | Produces directional signal (BUY/SELL/HOLD + probability distribution) from trained models. ktrdr is a strategy research system; its signals are backtested research outputs, not live-validated production signals. |
 | **Kronos Vol Regime Classifier** | Classifies current market as SELL_VOL / BUY_VOL / NEUTRAL based on frozen Kronos embeddings + trained linear head |
 | **Options Data Provider** | Supplies IV percentile, options chain data, and historical IV for backtesting |
 | **Signal Aggregation** | Combines ktrdr directional signal, Kronos vol regime, and IV context into a structured decision input |
@@ -100,11 +112,11 @@ Karl has a working directional trading system (ktrdr) with a Sharpe ratio ceilin
 
 1. **Trigger**: Lux runs on a schedule (e.g., every hour for 1h bars, every day for 1d bars) or on demand via Telegram command.
 
-2. **Fetch ktrdr signal**: Lux sends `POST /api/v1/models/predict` to ktrdr server with `{model_name, symbol, timeframe}`. Receives `{signal, confidence, signal_strength}` plus `input_features`.
+2. **Fetch ktrdr signal**: Lux sends `POST /api/v1/models/predict` to ktrdr server with `{model_name, symbol, timeframe}`. Receives `{signal, confidence, signal_strength}` plus `input_features`. Note: ktrdr's signals are research-grade outputs (validation Sharpe ~0.181 on forex, from training runs); the SPY model trained in M1 will have its own validation performance characteristics.
 
 3. **Fetch Kronos vol regime**: Lux calls the Kronos classifier (Python function, not REST — runs in Lux's process or via subprocess). Inputs recent OHLCV bars. Receives `{regime: SELL_VOL|BUY_VOL|NEUTRAL, confidence: float}`.
 
-4. **Fetch options context**: Lux retrieves current IV percentile (from VIX for indices, or from options chain data for single names) and the relevant options chain (strikes, expiries, bid/ask).
+4. **Fetch options context**: Lux retrieves current IV percentile (from VIX for SPY/indices, or from options chain data for single names) and the relevant options chain (strikes, expiries, bid/ask).
 
 5. **Aggregate and call Opus 4.7**: Lux constructs a structured JSON prompt containing the ktrdr signal, Kronos regime, IV data, and options chain. Sends to Opus 4.7 via Anthropic API with extended thinking enabled.
 
@@ -118,7 +130,7 @@ Karl has a working directional trading system (ktrdr) with a Sharpe ratio ceilin
 
 ### Signal 1: ktrdr Directional Signal
 
-**What it encodes**: The probability that the underlying asset will move up (BUY), down (SELL), or stay flat (HOLD) over the model's prediction horizon. This is a supervised classification output trained on historical price movements using triple barrier, zigzag, or forward return labels.
+**What it encodes**: The probability that the underlying asset will move up (BUY), down (SELL), or stay flat (HOLD) over the model's prediction horizon. This is a supervised classification output trained on historical price movements using triple barrier, zigzag, or forward return labels. ktrdr is a strategy research system — these signals are research outputs (validation Sharpe ~0.181 on forex pairs, from training runs), not live-validated production signals.
 
 **How it's produced**: 
 
@@ -131,6 +143,8 @@ The signal originates from ktrdr's neural network (`ktrdr/neural/models/base_mod
 5. Neural network (MLP/LSTM/GRU) produces softmax probabilities over {BUY, HOLD, SELL}
 6. `DecisionOrchestrator` (`ktrdr/decision/orchestrator.py`, lines 216-243) applies position-aware filters
 
+**SPY model (M1 prerequisite)**: ktrdr's existing models are trained on forex pairs (EUR/USD, GBP/USD). M1 must train a new ktrdr model on SPY/equity OHLCV data using the same fuzzy-neural pipeline. This model will produce directional signals for SPY, which gate all downstream milestones (M2 backtest, M3 paper trading). See Section 7 for details.
+
 **How Lux calls it**:
 
 ```
@@ -139,7 +153,7 @@ Content-Type: application/json
 
 {
     "model_name": "trend_tb_lstm_signal_v1",
-    "symbol": "AAPL",
+    "symbol": "SPY",
     "timeframe": "1h",
     "test_date": "2026-04-18T14:30:00"   // optional; defaults to latest bar
 }
@@ -151,7 +165,7 @@ Response (from `ktrdr/api/endpoints/models.py`, `PredictionResponse`, lines 194-
 {
     "success": true,
     "model_name": "trend_tb_lstm_signal_v1",
-    "symbol": "AAPL",
+    "symbol": "SPY",
     "test_date": "2026-04-18T14:30:00",
     "prediction": {
         "signal": "BUY",
@@ -278,6 +292,15 @@ class VolRegimeSignal:
 ---
 
 ## 4. Options Structure Selection Logic
+
+### Target Instrument: Equity Options
+
+This system trades **equity options**, with **SPY** as the primary underlying. The system is designed for equity options generically but is scoped to SPY initially for tractability — SPY has the most liquid options market, VIX is directly applicable as an IV proxy, and it provides a clean single-underlying test case before expanding to other equity options.
+
+**Explicitly NOT in scope**:
+- **Forex options**: OTC, illiquid, limited IBKR support. Although ktrdr's existing models are trained on forex pairs, forex options are not viable for this system.
+- **Plain stock/equity trading**: The system trades options, not the underlying equities directly.
+- **Index options (SPX)**: European-style, cash-settled. SPY options (American-style, share-settled) are preferred for IBKR paper trading compatibility.
 
 ### Decision Matrix
 
@@ -441,7 +464,7 @@ These thresholds are empirical starting points derived from common options tradi
 
 **Objective**: Combine ktrdr directional signal + Kronos vol regime -> select structure -> compute P&L using synthetic options pricing -> measure overall system Sharpe.
 
-**Gate**: ktrdr model trained and validated for target symbol (see [PREREQUISITE] in Section 7).
+**Gate**: ktrdr model trained and validated for SPY (completed in M1 — see Section 7).
 
 #### Options Data Availability
 
@@ -455,7 +478,7 @@ These thresholds are empirical starting points derived from common options tradi
 
 **[KARL INPUT NEEDED]**: Budget for historical options data. Options:
 - **$0 path**: Use VIX + Black-Scholes reconstruction (lower fidelity, but free). Suitable for Phase 2 proof-of-concept.
-- **~$200 path**: OptionsDX data for 2-3 key symbols. Real bid/ask spreads, real IV surface.
+- **~$200 path**: OptionsDX data for SPY. Real bid/ask spreads, real IV surface.
 - **~$1000+ path**: CBOE DataShop for comprehensive coverage.
 
 Recommendation: Start with $0 path (Black-Scholes reconstruction) for Phase 2. If results are promising, validate with OptionsDX data before paper trading.
@@ -498,7 +521,7 @@ where:
               IV_scalar_approx = max(0.8, min(2.0, beta_stock * 0.9 + 0.3))
 ```
 
-**[ASSUMPTION]**: Using VIX as IV proxy for all underlyings is a significant approximation. Single-name IV can deviate substantially from VIX. This is acceptable for proof-of-concept but NOT for production decisions. Paper trading with real IBKR chain data is the true validation.
+**[ASSUMPTION]**: Using VIX as IV proxy for SPY is a close approximation (VIX is derived from SPX options, and SPY tracks SPX). For single names, this is a significant approximation. This is acceptable for proof-of-concept but NOT for production decisions. Paper trading with real IBKR chain data is the true validation.
 
 **Known approximation errors in Black-Scholes reconstruction**:
 
@@ -516,7 +539,7 @@ where:
 
 ```python
 for each bar t in backtest_period:
-    # 1. Get ktrdr signal
+    # 1. Get ktrdr signal (from SPY model trained in M1)
     ktrdr_signal = ktrdr_model.predict(features_t)  # from existing BacktestingEngine feature cache
     
     # 2. Get Kronos vol regime
@@ -585,7 +608,7 @@ The options backtester is a **separate system** from ktrdr's existing `Backtesti
 - 2 years for out-of-sample options backtest
 - Additional data for IV percentile computation (252-day lookback)
 
-**[KARL INPUT NEEDED]**: Which symbols to start with? Recommendation: SPY (most liquid options, VIX is directly applicable) and one single-name stock from ktrdr's existing trained models. **Specific question**: Does a trained ktrdr model already exist for SPY? If not, training one is a prerequisite before M3 (see [PREREQUISITE] in Section 7).
+**SPY OHLCV data**: M1 requires SPY OHLCV data for training the ktrdr SPY model. SPY data is freely available via yfinance and must be loaded into ktrdr's data layer (`data/{timeframe}/SPY_{Timeframe}.csv`) before model training begins.
 
 ### Historical Implied Volatility Data
 
@@ -685,14 +708,29 @@ def build_vol_regime_labels(
 
 ## 7. Integration Points with ktrdr
 
+### M1 Prerequisite: Train ktrdr Model on SPY
+
+**This is a concrete M1 task, not an optional prerequisite.** M1 must include training a ktrdr model on SPY/equity OHLCV data using the existing fuzzy-neural pipeline. This model gates all downstream milestones — without a trained SPY model, the synthetic backtest (M2), paper trading (M3), and all subsequent phases cannot proceed.
+
+**Why this is needed**: ktrdr's existing models are trained on forex pairs (EUR/USD, GBP/USD, etc.). The system trades SPY equity options, so it needs a directional signal trained on SPY data. The same pipeline (OHLCV → IndicatorEngine → FuzzyEngine → FuzzyNeuralProcessor → MLP/LSTM/GRU) is used — only the training data changes.
+
+**M1 training steps**:
+
+1. **Acquire SPY OHLCV data**: Download SPY historical data (minimum 3 years, preferably 5+) via yfinance or other data provider. Load into ktrdr's data layer at `data/{timeframe}/SPY_{Timeframe}.csv`.
+
+2. **Configure strategy**: Create a ktrdr strategy configuration for SPY using the existing `StrategyConfigurationV3` schema. Select indicators, fuzzy sets, and neural network architecture (recommend starting with LSTM, which has performed best on ktrdr's forex models).
+
+3. **Train model**: Use ktrdr's standard training pipeline to train the model. The model will be saved at `models/{strategy_name}/{timeframe}_v{N}/`.
+
+4. **Validate model**: Run ktrdr's `BacktestingEngine` on held-out SPY data. Record Sharpe ratio, accuracy, and signal distribution. The SPY model does not need to exceed the forex model's Sharpe (0.181) — any directional signal content is sufficient for options amplification. However, if the model degenerates to all-HOLD, it is not usable.
+
+5. **Verify API availability**: Confirm the trained model can be loaded and called via `POST /api/v1/models/predict` with `symbol: "SPY"`.
+
+**The model name referenced in this document (`trend_tb_lstm_signal_v1`) is an example** — the actual model name will be determined during M1 training and should be updated in the system configuration.
+
 ### Lux -> ktrdr REST API
 
 **Endpoint**: `POST /api/v1/models/predict`
-
-**[PREREQUISITE — VERIFY BEFORE M3]**: A trained ktrdr model for the target symbol (e.g., SPY) must exist at `models/{strategy_name}/{timeframe}_v{N}/` before the backtest can run. The model name referenced in this document (`trend_tb_lstm_signal_v1`) is an example from the ktrdr API documentation — it is NOT confirmed to be a trained, available model for SPY. If no model exists for SPY:
-- **Option A**: Use ktrdr's existing `BacktestingEngine` to train one (standard ktrdr training pipeline)
-- **Option B**: Use a different symbol where a trained model already exists (e.g., AAPL if a model is trained there)
-- **Do NOT proceed to M3 without confirming this.**
 
 **Request** (from `ktrdr/api/endpoints/models.py`, `PredictionRequest`):
 ```json
@@ -801,7 +839,8 @@ Opus 4.7 receives a structured JSON prompt with all relevant context:
         "confidence": 0.756,
         "probabilities": {"BUY": 0.756, "HOLD": 0.182, "SELL": 0.062},
         "model": "trend_tb_lstm_signal_v1",
-        "timeframe": "1h"
+        "timeframe": "1h",
+        "signal_source": "ktrdr research system — backtested directional signal (SPY model trained in M1)"
     },
     "kronos_regime": {
         "regime": "SELL_VOL",
@@ -922,19 +961,19 @@ The synthetic backtest (Phase 2) validates the **decision matrix only**. The liv
 
 ### [KARL INPUT NEEDED]
 
-1. **Which symbols to start with?** Recommendation: SPY first (most liquid options, VIX directly applicable). Which single-name stock second? **Critical**: Does a trained ktrdr model already exist for SPY? If not, training one is a prerequisite before M3.
+1. **Budget for historical options data?** $0 (VIX + Black-Scholes reconstruction), ~$200 (OptionsDX for SPY), or $1000+ (CBOE DataShop)?
 
-2. **Budget for historical options data?** $0 (VIX + Black-Scholes reconstruction), ~$200 (OptionsDX for 2-3 symbols), or $1000+ (CBOE DataShop)?
+2. **Full probability distribution from ktrdr API**: The current `/predict` endpoint doesn't return `nn_probabilities`. Options: (a) Extend the API endpoint (~10 lines of code), or (b) call ktrdr as a Python library from Lux, bypassing REST. Recommendation: (a).
 
-3. **Full probability distribution from ktrdr API**: The current `/predict` endpoint doesn't return `nn_probabilities`. Options: (a) Extend the API endpoint (~10 lines of code), or (b) call ktrdr as a Python library from Lux, bypassing REST. Recommendation: (a).
+3. **ktrdr server lifecycle**: Persistent (always running) or on-demand (started per analysis cycle)? Recommendation: persistent.
 
-4. **ktrdr server lifecycle**: Persistent (always running) or on-demand (started per analysis cycle)? Recommendation: persistent.
+4. **Max risk per trade**: 2% of account value as default? Karl may have a different risk appetite.
 
-5. **Max risk per trade**: 2% of account value as default? Karl may have a different risk appetite.
+5. **Live trading approval gate**: Should every live trade require Karl's Telegram approval, or only trades above a certain size? Recommendation: require approval for all live trades initially, relax after 30+ successful paper trades.
 
-6. **Live trading approval gate**: Should every live trade require Karl's Telegram approval, or only trades above a certain size? Recommendation: require approval for all live trades initially, relax after 30+ successful paper trades.
+6. **IBKR MCP options execution API**: I don't know the exact IBKR MCP tool signatures for options order submission. This needs investigation — does the existing IBKR integration in Lux support multi-leg options orders, or only single-leg equity orders?
 
-7. **IBKR MCP options execution API**: I don't know the exact IBKR MCP tool signatures for options order submission. This needs investigation — does the existing IBKR integration in Lux support multi-leg options orders, or only single-leg equity orders?
+7. **Additional equity options underlyings**: After SPY is validated, which other equity options to expand to? (e.g., QQQ, IWM, individual large-cap stocks)
 
 ### [VALIDATE EMPIRICALLY]
 
@@ -960,9 +999,11 @@ The synthetic backtest (Phase 2) validates the **decision matrix only**. The liv
 
 11. **Confidence gate sweep**: During M3, sweep `min_ktrdr_confidence` across [0.40, 0.45, 0.50, 0.55]. Select the threshold that maximizes Sharpe while keeping >= 50 trades over 2 years.
 
+12. **SPY model performance**: What Sharpe ratio and signal distribution does the ktrdr model achieve on SPY data? Compare against forex model performance (Sharpe 0.181) as a reference point, but do not gate on exceeding it.
+
 ### [ASSUMPTION]
 
-1. **VIX as universal IV proxy**: Using VIX/100 as IV for all underlyings in the $0 backtest path. This is known to be inaccurate for single names. Acceptable for proof-of-concept.
+1. **VIX as IV proxy for SPY**: Using VIX/100 as IV for SPY is a close approximation (VIX is derived from SPX options). For other equity underlyings, this is less accurate. Acceptable for SPY-focused proof-of-concept.
 
 2. **2% max risk per trade**: Conservative baseline. Adjustable.
 
@@ -974,7 +1015,7 @@ The synthetic backtest (Phase 2) validates the **decision matrix only**. The liv
 
 6. **Kronos frozen embeddings contain vol information**: This is the central hypothesis. If false, the vol regime classifier should be replaced with a simpler approach (e.g., train a small LSTM directly on OHLCV + VIX for vol regime classification, without Kronos).
 
-7. **ktrdr trained models exist for target symbols**: Karl has already trained ktrdr models that produce directional signals for the target symbols. If not, training must happen first (see [PREREQUISITE] in Section 7).
+7. **ktrdr signal methodology transfers from forex to equities**: The same fuzzy-neural pipeline that produces directional signals on forex pairs can produce useful signals on SPY/equity data. This is validated during M1 model training.
 
 8. **Lux can call Python functions directly**: Lux can import and run `KronosFeatureProvider` as a Python module, not just via REST API. This avoids needing a separate Kronos microservice.
 
@@ -984,6 +1025,8 @@ The synthetic backtest (Phase 2) validates the **decision matrix only**. The liv
 
 | Term | Definition |
 |------|-----------|
+| **Target Universe** | **SPY equity options** as the primary instrument. The system is designed for equity options generically but scoped to SPY initially for tractability (most liquid options, VIX directly applicable). Other equity options (QQQ, IWM, large-cap single names) may be added after SPY is validated. Forex options are explicitly out of scope (OTC, illiquid). |
+| **ktrdr** | A **strategy research system** (not a live trading system) that produces directional signals on forex pairs (EUR/USD, GBP/USD) using a fuzzy-neural pipeline. Sharpe ~0.181 from internal validation runs (training-period validation, not independent backtest); no live trading history. |
 | **IV Percentile** | The fraction of days in the trailing 252-day window where IV was lower than today's IV (0-100). A value of 80 means today's IV is higher than 80% of recent days. This is the sole IV-relative metric used in this system — see Section 3 for rationale. |
 | **IV Rank** | An alternative metric (NOT used in this system): `(current - 252d_low) / (252d_high - 252d_low) * 100`. Sensitive to outlier spikes; see Section 3 for why IV Percentile was chosen instead. |
 | **DTE** | Days to expiry for an options contract |
