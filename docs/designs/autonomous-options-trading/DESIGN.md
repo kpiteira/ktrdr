@@ -2,7 +2,7 @@
 
 > **Author**: Claude (Opus 4.6), commissioned by Karl Piteira
 > **Date**: 2026-04-18
-> **Status**: Draft — awaiting Karl's review before architecture phase
+> **Status**: Draft v3 — fixes applied for IV metric consistency, backtest/live validation gap, SPY model prerequisite, label frequency calibration
 > **Grounded in**: ktrdr codebase analysis (`KTRDR_REALITY_MAP.md`), Kronos integration spec (`spec.md`)
 
 ---
@@ -59,7 +59,7 @@ Karl has a working directional trading system (ktrdr) with a Sharpe ratio ceilin
              v                v                v
     +--------------------------------------------------+
     |           Signal Aggregation Layer                |
-    |  ktrdr signal + Kronos regime + IV rank/data     |
+    |  ktrdr signal + Kronos regime + IV percentile    |
     +------------------------+-------------------------+
                              |
                              v
@@ -90,7 +90,7 @@ Karl has a working directional trading system (ktrdr) with a Sharpe ratio ceilin
 | **Lux** | Orchestrates the entire flow: polls ktrdr, runs Kronos, calls Opus 4.7, manages positions, reports via Telegram |
 | **ktrdr REST API** | Produces directional signal (BUY/SELL/HOLD + probability distribution) from existing trained models |
 | **Kronos Vol Regime Classifier** | Classifies current market as SELL_VOL / BUY_VOL / NEUTRAL based on frozen Kronos embeddings + trained linear head |
-| **Options Data Provider** | Supplies IV rank, options chain data, and historical IV for backtesting |
+| **Options Data Provider** | Supplies IV percentile, options chain data, and historical IV for backtesting |
 | **Signal Aggregation** | Combines ktrdr directional signal, Kronos vol regime, and IV context into a structured decision input |
 | **Opus 4.7 Reasoning** | Selects optimal options structure, strikes, expiry, and position size given the aggregated signal |
 | **Position Manager** | Tracks open options positions, monitors Greeks, triggers exit conditions |
@@ -104,7 +104,7 @@ Karl has a working directional trading system (ktrdr) with a Sharpe ratio ceilin
 
 3. **Fetch Kronos vol regime**: Lux calls the Kronos classifier (Python function, not REST — runs in Lux's process or via subprocess). Inputs recent OHLCV bars. Receives `{regime: SELL_VOL|BUY_VOL|NEUTRAL, confidence: float}`.
 
-4. **Fetch options context**: Lux retrieves current IV rank (from VIX for indices, or from options chain data for single names) and the relevant options chain (strikes, expiries, bid/ask).
+4. **Fetch options context**: Lux retrieves current IV percentile (from VIX for indices, or from options chain data for single names) and the relevant options chain (strikes, expiries, bid/ask).
 
 5. **Aggregate and call Opus 4.7**: Lux constructs a structured JSON prompt containing the ktrdr signal, Kronos regime, IV data, and options chain. Sends to Opus 4.7 via Anthropic API with extended thinking enabled.
 
@@ -227,17 +227,20 @@ The classifier is trained on historical data where the label is derived from the
 ```
 Label construction:
   1. For each bar t, compute:
-     - IV_rank_t = percentile rank of current IV over trailing 252 trading days
+     - IV_percentile_t = percentile rank of current IV over trailing 252 trading days
+       (i.e., the fraction of days in the lookback window where IV was lower than today's IV)
      - RV_forward = realized volatility over the next N trading days (N = target holding period, e.g., 20 days)
      - IV_t = current implied volatility (from VIX for indices, or from ATM option IV for single names)
   
   2. Assign label:
-     - SELL_VOL:  IV_rank_t > 70th percentile AND RV_forward < IV_t * 0.85
-                  (IV is high AND realized vol came in lower — selling premium was correct)
-     - BUY_VOL:   IV_rank_t < 30th percentile AND RV_forward > IV_t * 1.15
-                  (IV is low AND realized vol expanded — buying options was correct)
+     - SELL_VOL:  IV_percentile_t > 70 AND RV_forward < IV_t * 0.85
+                  (IV is high relative to its history AND realized vol came in lower — selling premium was correct)
+     - BUY_VOL:   IV_percentile_t < 30 AND RV_forward > IV_t * 1.15
+                  (IV is low relative to its history AND realized vol expanded — buying options was correct)
      - NEUTRAL:   everything else
 ```
+
+**Why IV Percentile instead of IV Rank**: This system uses **IV Percentile** (the fraction of trailing days where IV was lower than today) rather than **IV Rank** (min-max normalization: `(current - low) / (high - low)`). IV Percentile is more statistically robust because it is not distorted by outlier spikes. Example: if VIX sat between 15-17 for most of the year but spiked to 35 briefly, IV Rank of 22 would be only 35% (`(22-15)/(35-15)`), while IV Percentile of 22 would correctly reflect that 22 is higher than the vast majority of observed days (likely 90%+). For options structure selection, we care about how unusual today's IV is relative to the distribution of recent IV — that is what IV Percentile measures. The 70/30 percentile thresholds are calibrated to this metric: "IV is higher than 70% of recent days" is a meaningful statement regardless of whether extreme outliers exist in the lookback window.
 
 **[ASSUMPTION]**: The 70th/30th percentile thresholds and the 0.85/1.15 multipliers are starting points. These should be tuned during Phase 1 validation. The label construction must avoid look-ahead bias — labels are based on *future* realized vol but the *features* (Kronos embeddings) use only past bars.
 
@@ -257,18 +260,18 @@ class VolRegimeSignal:
     regime: str            # "SELL_VOL" | "BUY_VOL" | "NEUTRAL"
     confidence: float      # max probability (0.0-1.0)
     probabilities: dict    # {"SELL_VOL": float, "BUY_VOL": float, "NEUTRAL": float}
-    iv_rank: float         # current IV rank (0-100) for context
+    iv_percentile: float   # current IV percentile (0-100) for context
     timestamp: str         # ISO 8601
 ```
 
 **How it affects structure selection**: See Section 4 decision matrix. In brief:
-- SELL_VOL → favor structures that collect premium (iron condors, credit spreads, short strangles)
-- BUY_VOL → favor structures that pay premium (long straddles, debit spreads, long strangles)
-- NEUTRAL → favor directional structures where theta is minimal relative to delta
+- SELL_VOL -> favor structures that collect premium (iron condors, credit spreads, short strangles)
+- BUY_VOL -> favor structures that pay premium (long straddles, debit spreads, long strangles)
+- NEUTRAL -> favor directional structures where theta is minimal relative to delta
 
 **Failure modes**:
-- **Kronos model load failure**: Model weights not downloaded or corrupted. **Mitigation**: Verify weights on startup; fall back to IV rank alone (heuristic: IV rank > 70 = SELL_VOL, < 30 = BUY_VOL, else NEUTRAL).
-- **Embedding quality insufficient**: Kronos hidden states may not encode vol-relevant information. **This is the central empirical risk**. Detectable in Phase 1 via linear probe AUC. If AUC < 0.55, the vol regime classifier adds no value and should be replaced with a simpler IV rank heuristic.
+- **Kronos model load failure**: Model weights not downloaded or corrupted. **Mitigation**: Verify weights on startup; fall back to IV percentile alone (heuristic: IV percentile > 70 = SELL_VOL, < 30 = BUY_VOL, else NEUTRAL).
+- **Embedding quality insufficient**: Kronos hidden states may not encode vol-relevant information. **This is the central empirical risk**. Detectable in Phase 1 via linear probe AUC. If AUC < 0.55, the vol regime classifier adds no value and should be replaced with a simpler IV percentile heuristic.
 - **Label noise**: The IV/RV relationship is noisy. SELL_VOL/BUY_VOL labels constructed from VIX may not correspond to single-name IV dynamics. **Mitigation**: Use ticker-specific IV when available (from options data); fall back to VIX only for index ETFs.
 - **CPU latency**: Kronos-mini forward pass on CPU is ~100-500ms per prediction [VALIDATE EMPIRICALLY]. This is acceptable for hourly/daily signals but would be a bottleneck for minute-level.
 
@@ -278,7 +281,7 @@ class VolRegimeSignal:
 
 ### Decision Matrix
 
-The decision matrix maps (ktrdr directional signal, Kronos vol regime, IV rank) to a specific options structure:
+The decision matrix maps (ktrdr directional signal, Kronos vol regime, IV percentile) to a specific options structure:
 
 ```
                           Kronos Vol Regime
@@ -389,6 +392,8 @@ Trades are only opened when signals meet minimum thresholds:
 
 If thresholds are not met, the system holds (no new position).
 
+These thresholds are empirical starting points derived from common options trading practice, not from optimization on ktrdr's signal distribution. During M3 (backtest), sweep the `min_ktrdr_confidence` gate across [0.40, 0.45, 0.50, 0.55] and report the effect on trade frequency and Sharpe. Use the backtest to select the threshold that maximizes Sharpe while keeping >= 50 trades over 2 years.
+
 ---
 
 ## 5. The Backtesting Strategy
@@ -412,6 +417,8 @@ If thresholds are not met, the system holds (no new position).
 
 3. **Classifier training**:
    - Train `nn.Linear(256, 3)` with cross-entropy loss on train set
+   - Class weights: `[1.0, 5.0, 8.0]` for [NEUTRAL, SELL_VOL, BUY_VOL] as a starting point (see Section 6 for expected class distribution). Tune based on actual observed label distribution.
+   - If NEUTRAL > 80% of labels, consider upsampling minority classes or using focal loss instead of weighted cross-entropy.
    - Early stopping on validation loss
    - No fine-tuning of Kronos weights
 
@@ -419,12 +426,12 @@ If thresholds are not met, the system holds (no new position).
 
    | Metric | Threshold for "Useful" | Why This Threshold |
    |--------|----------------------|-------------------|
-   | AUC (macro-averaged) | > 0.60 | Random classifier = 0.50; we need meaningful lift |
+   | AUC (per-class) | SELL_VOL AUC > 0.58 AND BUY_VOL AUC > 0.55 | Per-class AUC is more informative than macro-average when classes are heavily imbalanced; random = 0.50 |
    | Accuracy | > 0.45 | 3-class, so random = 0.33; but class imbalance matters more than accuracy |
    | Per-class precision | > 0.40 for SELL_VOL and BUY_VOL | We'd rather be right when we predict a regime than catch every regime |
    | Signal-following Sharpe | > 0.20 | Trade: sell straddle on SELL_VOL, buy straddle on BUY_VOL, flat on NEUTRAL |
 
-5. **Baseline comparison**: Compare Kronos classifier against a simple heuristic: IV rank > 70 = SELL_VOL, IV rank < 30 = BUY_VOL, else NEUTRAL. If Kronos doesn't beat this heuristic, the complexity isn't justified.
+5. **Baseline comparison**: Compare Kronos classifier against a simple heuristic: IV percentile > 70 = SELL_VOL, IV percentile < 30 = BUY_VOL, else NEUTRAL. If Kronos doesn't beat this heuristic, the complexity isn't justified.
 
 6. **[VALIDATE EMPIRICALLY]**: Does mean pooling of Kronos hidden states outperform last hidden state? Test both.
 
@@ -432,7 +439,9 @@ If thresholds are not met, the system holds (no new position).
 
 ### Phase 2: Synthetic Options Backtest
 
-**Objective**: Combine ktrdr directional signal + Kronos vol regime → select structure → compute P&L using synthetic options pricing → measure overall system Sharpe.
+**Objective**: Combine ktrdr directional signal + Kronos vol regime -> select structure -> compute P&L using synthetic options pricing -> measure overall system Sharpe.
+
+**Gate**: ktrdr model trained and validated for target symbol (see [PREREQUISITE] in Section 7).
 
 #### Options Data Availability
 
@@ -514,10 +523,10 @@ for each bar t in backtest_period:
     kronos_regime = kronos_classifier.predict(kronos_embedding_t)  # from pre-computed cache
     
     # 3. Get IV context
-    iv_rank_t = compute_iv_rank(vix_history, t)
+    iv_percentile_t = compute_iv_percentile(vix_history, t)
     
     # 4. Decision matrix → structure selection
-    structure = decision_matrix(ktrdr_signal, kronos_regime, iv_rank_t)
+    structure = decision_matrix(ktrdr_signal, kronos_regime, iv_percentile_t)
     
     # 5. If structure != NO_TRADE and confidence gates pass:
     #    a. Select strikes using B-S delta calculation
@@ -574,9 +583,9 @@ The options backtester is a **separate system** from ktrdr's existing `Backtesti
 **Required data range**: At least 3 years for meaningful options backtesting:
 - 1 year for Kronos classifier training
 - 2 years for out-of-sample options backtest
-- Additional data for IV rank computation (252-day lookback)
+- Additional data for IV percentile computation (252-day lookback)
 
-**[KARL INPUT NEEDED]**: Which symbols to start with? Recommendation: SPY (most liquid options, VIX is directly applicable) and one single-name stock from ktrdr's existing trained models.
+**[KARL INPUT NEEDED]**: Which symbols to start with? Recommendation: SPY (most liquid options, VIX is directly applicable) and one single-name stock from ktrdr's existing trained models. **Specific question**: Does a trained ktrdr model already exist for SPY? If not, training one is a prerequisite before M3 (see [PREREQUISITE] in Section 7).
 
 ### Historical Implied Volatility Data
 
@@ -590,16 +599,22 @@ The options backtester is a **separate system** from ktrdr's existing `Backtesti
 - CBOE LiveVol: Provides historical IV surface data
 - `[KARL INPUT NEEDED]`: Budget and priority for single-name IV data
 
-**IV rank computation**:
+**IV percentile computation**:
+
 ```python
-def iv_rank(iv_current: float, iv_history_252d: pd.Series) -> float:
-    """IV Rank = (current - 252d low) / (252d high - 252d low) * 100"""
-    iv_min = iv_history_252d.min()
-    iv_max = iv_history_252d.max()
-    if iv_max == iv_min:
-        return 50.0
-    return (iv_current - iv_min) / (iv_max - iv_min) * 100
+def compute_iv_percentile(iv_current: float, iv_history_252d: pd.Series) -> float:
+    """IV Percentile: fraction of days in the lookback window where IV was lower than today.
+    
+    This is NOT IV Rank (min-max normalization). IV Percentile is more robust to
+    outlier spikes — see Section 3 for the rationale.
+    
+    Returns 0-100. A value of 80 means current IV is higher than 80% of the
+    trailing 252 trading days.
+    """
+    return scipy.stats.percentileofscore(iv_history_252d, iv_current, kind='rank')
 ```
+
+**Note**: The same `compute_iv_percentile()` function is used in (a) label construction for the Kronos classifier, (b) signal aggregation for the decision matrix, (c) the `iv_percentile` field in `VolRegimeSignal`, and (d) the config schema thresholds (70/30). There is one metric and one function — no separate "IV Rank" concept in this system.
 
 ### Options Chain Data
 
@@ -626,22 +641,28 @@ def compute_realized_vol(prices: pd.Series, window: int = 20) -> pd.Series:
     log_returns = np.log(prices / prices.shift(1))
     return log_returns.rolling(window).std() * np.sqrt(252)
 
-def construct_vol_regime_labels(
+def build_vol_regime_labels(
     iv_series: pd.Series,        # daily IV (e.g., VIX/100)
     prices: pd.Series,           # daily close prices
     forward_window: int = 20,    # days to compute forward RV
-    iv_rank_high: float = 70,    # percentile for SELL_VOL
-    iv_rank_low: float = 30,     # percentile for BUY_VOL
+    iv_pctl_high: float = 70,    # percentile for SELL_VOL
+    iv_pctl_low: float = 30,     # percentile for BUY_VOL
     rv_discount: float = 0.85,   # RV < IV * discount = SELL_VOL
     rv_premium: float = 1.15,    # RV > IV * premium = BUY_VOL
 ) -> pd.Series:
-    """Returns labels: 0=NEUTRAL, 1=SELL_VOL, 2=BUY_VOL."""
-    iv_rank = compute_iv_rank_rolling(iv_series, 252)
+    """Returns labels: 0=NEUTRAL, 1=SELL_VOL, 2=BUY_VOL.
+    
+    [VALIDATE EMPIRICALLY]: Before training, print the label distribution.
+    If SELL_VOL or BUY_VOL < 5% of total labels, the AND thresholds may be 
+    too strict — loosen to iv_pctl_high=65 and/or rv_discount=0.90 to 
+    generate more training examples.
+    """
+    iv_percentile = compute_iv_percentile_rolling(iv_series, 252)
     rv_forward = compute_realized_vol(prices, forward_window).shift(-forward_window)
     
     labels = pd.Series(0, index=prices.index)  # default NEUTRAL
-    sell_vol_mask = (iv_rank > iv_rank_high) & (rv_forward < iv_series * rv_discount)
-    buy_vol_mask = (iv_rank < iv_rank_low) & (rv_forward > iv_series * rv_premium)
+    sell_vol_mask = (iv_percentile > iv_pctl_high) & (rv_forward < iv_series * rv_discount)
+    buy_vol_mask = (iv_percentile < iv_pctl_low) & (rv_forward > iv_series * rv_premium)
     labels[sell_vol_mask] = 1  # SELL_VOL
     labels[buy_vol_mask] = 2  # BUY_VOL
     
@@ -650,7 +671,9 @@ def construct_vol_regime_labels(
 
 **[ASSUMPTION]**: Using 20-day forward realized vol. This matches the ~30-day options DTE target. The exact forward window should be tested: 10, 15, 20, 30 days.
 
-**Label distribution estimate**: On typical equity indices (SPY), expect roughly 15-25% SELL_VOL, 10-20% BUY_VOL, 55-75% NEUTRAL. The class imbalance needs handling — focal loss or class-weighted cross-entropy.
+**Label distribution estimate**: Expect approximately **10-15% SELL_VOL, 5-10% BUY_VOL, 75-85% NEUTRAL** on typical equity indices (SPY). These estimates account for the joint probability of both AND conditions being satisfied simultaneously — elevated IV alone occurs ~25% of the time, but the additional requirement that realized vol actually comes in lower than IV reduces this to ~10-15%. BUY_VOL is even rarer because low-IV environments that are followed by vol expansion are uncommon (~5-10%). The exact distribution should be computed empirically during M1: run `build_vol_regime_labels()` on the training data and report the actual counts before training.
+
+**Class weights for training**: Use `[1.0, 5.0, 8.0]` for [NEUTRAL, SELL_VOL, BUY_VOL] as a starting point, then tune based on the actual observed label distribution. If NEUTRAL > 80% of labels, consider upsampling the minority classes or using focal loss instead of weighted cross-entropy.
 
 ### Risk-Free Rate
 
@@ -662,9 +685,14 @@ def construct_vol_regime_labels(
 
 ## 7. Integration Points with ktrdr
 
-### Lux → ktrdr REST API
+### Lux -> ktrdr REST API
 
 **Endpoint**: `POST /api/v1/models/predict`
+
+**[PREREQUISITE — VERIFY BEFORE M3]**: A trained ktrdr model for the target symbol (e.g., SPY) must exist at `models/{strategy_name}/{timeframe}_v{N}/` before the backtest can run. The model name referenced in this document (`trend_tb_lstm_signal_v1`) is an example from the ktrdr API documentation — it is NOT confirmed to be a trained, available model for SPY. If no model exists for SPY:
+- **Option A**: Use ktrdr's existing `BacktestingEngine` to train one (standard ktrdr training pipeline)
+- **Option B**: Use a different symbol where a trained model already exists (e.g., AAPL if a model is trained there)
+- **Do NOT proceed to M3 without confirming this.**
 
 **Request** (from `ktrdr/api/endpoints/models.py`, `PredictionRequest`):
 ```json
@@ -717,7 +745,7 @@ def construct_vol_regime_labels(
 
 **[ASSUMPTION]**: Using option 1 (persistent server). ktrdr's FastAPI server is lightweight — the main memory cost is the loaded neural network model(s), which are small (MLP: <1MB, LSTM/GRU: <10MB).
 
-### Options Backtester ↔ Existing BacktestingEngine
+### Options Backtester <-> Existing BacktestingEngine
 
 The options backtester is **separate** from the existing `BacktestingEngine`. The interaction is:
 
@@ -781,7 +809,7 @@ Opus 4.7 receives a structured JSON prompt with all relevant context:
         "probabilities": {"SELL_VOL": 0.68, "BUY_VOL": 0.12, "NEUTRAL": 0.20}
     },
     "vol_context": {
-        "iv_rank": 78.5,
+        "iv_percentile": 78.5,
         "current_iv": 0.22,
         "vix": 22.4,
         "rv_20d": 0.17
@@ -820,6 +848,8 @@ Opus 4.7 receives a structured JSON prompt with all relevant context:
 {
     "action": "OPEN",
     "structure": "bull_put_spread",
+    "source": "opus",
+    "matrix_agreed": true,
     "legs": [
         {"type": "SELL", "option_type": "PUT", "strike": 515, "expiry": "2026-05-16", "contracts": 2},
         {"type": "BUY", "option_type": "PUT", "strike": 510, "expiry": "2026-05-16", "contracts": 2}
@@ -833,11 +863,13 @@ Opus 4.7 receives a structured JSON prompt with all relevant context:
         "stop_loss_pct": 100,
         "time_exit_dte": 7
     },
-    "reasoning": "IV rank at 78.5 with BUY signal. Selling put spread collects elevated premium with directional support. Short 515 put at 0.22 delta gives room for pullback. Width of 5 limits max loss to $630 per spread. Two contracts = $1260 max risk within $2000 budget.",
+    "reasoning": "IV percentile at 78.5 with BUY signal. Selling put spread collects elevated premium with directional support. Short 515 put at 0.22 delta gives room for pullback. Width of 5 limits max loss to $630 per spread. Two contracts = $1260 max risk within $2000 budget.",
     "confidence": "HIGH",
     "warnings": []
 }
 ```
+
+The `source` field indicates whether this recommendation came from Opus 4.7 (`"opus"`) or the decision matrix fallback (`"matrix"`). The `matrix_agreed` field indicates whether Opus 4.7's recommendation matches what the decision matrix would have selected — see "Validation Gap" below.
 
 ### Is Opus 4.7 in the Backtest Hot Path?
 
@@ -851,11 +883,32 @@ Opus 4.7 is used only in **live/paper trading**, where:
 
 **[ASSUMPTION]**: Opus 4.7 is called via the Anthropic API using Lux's existing API key. No separate authentication needed.
 
+### Validation Gap: Backtest vs Live System
+
+The synthetic backtest (Phase 2) validates the **decision matrix only**. The live system adds Opus 4.7, which can **override** the decision matrix. These are different systems, and a Sharpe > 0.50 in synthetic backtest says nothing about what happens when Opus 4.7 makes different choices.
+
+**What "Opus override" means**: Opus 4.7 changes the selected structure (e.g., bull put spread -> iron condor), changes strikes or expiry beyond what the matrix specified, declines to trade when the matrix would trade, or recommends a trade when the matrix would not. Any of these count as a divergence from the matrix path.
+
+**Live tracking protocol** to close the validation gap:
+
+1. **Tag every trade by source**: Every `TradeRecommendation` records `source: "opus" | "matrix"` and `matrix_agreed: bool`. When Opus 4.7 is called and its output matches the matrix suggestion (same structure, similar strikes), `source` is `"opus"` but `matrix_agreed` is `true`. When Opus diverges, `matrix_agreed` is `false`.
+
+2. **Track performance separately**: The `calibration` table tracks P&L, win rate, and per-trade Sharpe contribution separately by source:
+   - `matrix_agreed == true`: trades where Opus followed the matrix
+   - `matrix_agreed == false`: trades where Opus overrode the matrix
+   - This separation reveals whether Opus overrides add or destroy value
+
+3. **Evaluate after sufficient data**: After 30+ live/paper trades with at least 10 Opus-override trades:
+   - Compare P&L, Sharpe, and win rate between override and non-override trades
+   - If Opus diverges from the matrix on >30% of trades AND Opus-override trades underperform matrix-agreed trades by >15% on P&L, disable Opus reasoning and fall back to matrix-only mode
+
+4. **The paper trading phase (M5) is where the live system is actually validated**, not the synthetic backtest. The synthetic backtest validates the decision matrix as a strategy; paper trading validates the full system including Opus 4.7's judgment, real bid/ask spreads, execution quality, and end-to-end reliability.
+
 ### Failure Modes
 
 | Failure | Impact | Mitigation |
 |---------|--------|------------|
-| Opus 4.7 API unavailable (outage, rate limit) | Cannot get reasoning for new trades | Fall back to decision matrix output directly; no Opus override. Log the fallback. |
+| Opus 4.7 API unavailable (outage, rate limit) | Cannot get reasoning for new trades | Fall back to decision matrix output directly; record `source: "matrix"`. Log the fallback. |
 | Opus 4.7 returns malformed JSON | Cannot parse trade recommendation | Validate response schema. If invalid after 2 retries, use decision matrix fallback. |
 | Opus 4.7 takes > 60 seconds | Blocks the analysis cycle | Set 60-second timeout. Use decision matrix fallback on timeout. |
 | Opus 4.7 recommends structure outside scope | Could introduce unwanted risk | Validate `structure` field against allowed list. Reject and retry with explicit constraint. |
@@ -869,7 +922,7 @@ Opus 4.7 is used only in **live/paper trading**, where:
 
 ### [KARL INPUT NEEDED]
 
-1. **Which symbols to start with?** Recommendation: SPY first (most liquid options, VIX directly applicable). Which single-name stock second?
+1. **Which symbols to start with?** Recommendation: SPY first (most liquid options, VIX directly applicable). Which single-name stock second? **Critical**: Does a trained ktrdr model already exist for SPY? If not, training one is a prerequisite before M3.
 
 2. **Budget for historical options data?** $0 (VIX + Black-Scholes reconstruction), ~$200 (OptionsDX for 2-3 symbols), or $1000+ (CBOE DataShop)?
 
@@ -885,7 +938,7 @@ Opus 4.7 is used only in **live/paper trading**, where:
 
 ### [VALIDATE EMPIRICALLY]
 
-1. **Kronos embedding quality for vol classification**: Does AUC > 0.60? This is the central empirical question. If it fails, fall back to IV rank heuristic.
+1. **Kronos embedding quality for vol classification**: Does AUC > 0.60? This is the central empirical question. If it fails, fall back to IV percentile heuristic.
 
 2. **Kronos-mini vs Kronos-small**: Which embedding dimension (256 vs 512) produces better vol regime classification? Start with mini for speed.
 
@@ -895,13 +948,17 @@ Opus 4.7 is used only in **live/paper trading**, where:
 
 5. **Optimal DTE for each structure**: The design specifies 14-45 days depending on structure. Backtest should test 14, 21, 30, 45 DTE for each structure type.
 
-6. **Label construction thresholds**: The 70/30 IV rank percentiles and 0.85/1.15 RV/IV multipliers are starting points. Sensitivity analysis needed.
+6. **Label construction thresholds**: The 70/30 IV percentile thresholds and 0.85/1.15 RV/IV multipliers are starting points. Sensitivity analysis needed.
 
 7. **Exit timing**: Take profit at 50% of max profit, or 40%, or 60%? Stop loss at max loss, or earlier at 75%? Backtest should sweep these parameters.
 
 8. **Kronos CPU inference latency**: Expected ~100-500ms on CPU for Kronos-mini. Verify on Karl's Docker stack.
 
-9. **Signal combination method**: The decision matrix is rule-based. An alternative is to train a small model that takes (ktrdr probabilities, Kronos regime probabilities, IV rank) as input and outputs structure probabilities. Start with rules, test learned combination if rules work.
+9. **Signal combination method**: The decision matrix is rule-based. An alternative is to train a small model that takes (ktrdr probabilities, Kronos regime probabilities, IV percentile) as input and outputs structure probabilities. Start with rules, test learned combination if rules work.
+
+10. **Label distribution on actual training data**: Run `build_vol_regime_labels()` on the training data before training the classifier. If SELL_VOL < 5% or BUY_VOL < 5%, loosen thresholds (e.g., `iv_pctl_high=65`, `rv_discount=0.90`).
+
+11. **Confidence gate sweep**: During M3, sweep `min_ktrdr_confidence` across [0.40, 0.45, 0.50, 0.55]. Select the threshold that maximizes Sharpe while keeping >= 50 trades over 2 years.
 
 ### [ASSUMPTION]
 
@@ -909,7 +966,7 @@ Opus 4.7 is used only in **live/paper trading**, where:
 
 2. **2% max risk per trade**: Conservative baseline. Adjustable.
 
-3. **Opus 4.7 not in backtest hot path**: Decision matrix is applied deterministically in backtests. Opus is only used for live/paper to provide nuanced reasoning.
+3. **Opus 4.7 not in backtest hot path**: Decision matrix is applied deterministically in backtests. Opus is only used for live/paper to provide nuanced reasoning. The backtest validates the matrix; paper trading validates the full system including Opus (see Section 8, "Validation Gap").
 
 4. **No position correlation**: Each trade is sized independently. No portfolio-level Greek management in Phase 1.
 
@@ -917,7 +974,7 @@ Opus 4.7 is used only in **live/paper trading**, where:
 
 6. **Kronos frozen embeddings contain vol information**: This is the central hypothesis. If false, the vol regime classifier should be replaced with a simpler approach (e.g., train a small LSTM directly on OHLCV + VIX for vol regime classification, without Kronos).
 
-7. **ktrdr trained models exist for target symbols**: Karl has already trained ktrdr models that produce directional signals for the target symbols. If not, training must happen first.
+7. **ktrdr trained models exist for target symbols**: Karl has already trained ktrdr models that produce directional signals for the target symbols. If not, training must happen first (see [PREREQUISITE] in Section 7).
 
 8. **Lux can call Python functions directly**: Lux can import and run `KronosFeatureProvider` as a Python module, not just via REST API. This avoids needing a separate Kronos microservice.
 
@@ -927,7 +984,8 @@ Opus 4.7 is used only in **live/paper trading**, where:
 
 | Term | Definition |
 |------|-----------|
-| **IV Rank** | Current IV's percentile position relative to its 252-day range (0-100) |
+| **IV Percentile** | The fraction of days in the trailing 252-day window where IV was lower than today's IV (0-100). A value of 80 means today's IV is higher than 80% of recent days. This is the sole IV-relative metric used in this system — see Section 3 for rationale. |
+| **IV Rank** | An alternative metric (NOT used in this system): `(current - 252d_low) / (252d_high - 252d_low) * 100`. Sensitive to outlier spikes; see Section 3 for why IV Percentile was chosen instead. |
 | **DTE** | Days to expiry for an options contract |
 | **ATM** | At-the-money: strike price equal to current underlying price |
 | **OTM** | Out-of-the-money: strike price above (calls) or below (puts) current price |
