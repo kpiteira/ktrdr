@@ -1,0 +1,75 @@
+# =============================================================================
+# autoresearch — seed strategy
+#
+# This is the starting point for the ktrdr-autoresearch loop.
+# The agent modifies this file autonomously to improve val_sharpe.
+#
+# Baseline: RSI + MACD momentum on EURUSD 1h
+# =============================================================================
+
+name: autoresearch
+version: "3.0"
+description: Autoresearch seed strategy — RSI + MACD momentum on EURUSD 1h
+
+indicators:
+  rsi_14:
+    type: rsi
+    period: 14
+
+  macd:
+    type: macd
+    fast_period: 12
+    slow_period: 26
+    signal_period: 9
+
+  atr_14:
+    type: atr
+    period: 14
+
+fuzzy_sets:
+  rsi_momentum:
+    indicator: rsi_14
+    oversold:   [0, 25, 40]
+    neutral:    [35, 50, 65]
+    overbought: [60, 75, 100]
+
+  macd_signal:
+    indicator: macd
+    output: histogram
+    negative: [-0.002, -0.001, 0]
+    neutral:   [-0.0005, 0, 0.0005]
+    positive:  [0, 0.001, 0.002]
+
+nn_inputs:
+  - fuzzy_set: rsi_momentum
+    timeframes: ["1h"]
+  - fuzzy_set: macd_signal
+    timeframes: ["1h"]
+
+model:
+  type: mlp
+  architecture:
+    hidden_layers: [64, 32]
+    dropout: 0.3
+
+decisions:
+  output_format: classification
+  thresholds:
+    buy:  0.6
+    sell: 0.6
+
+training:
+  epochs: 50
+  batch_size: 64
+  learning_rate: 0.001
+  optimizer: adam
+  loss_function: cross_entropy
+
+training_data:
+  symbols:
+    mode: single
+    symbol: EURUSD
+  timeframes:
+    mode: single
+    timeframe: "1h"
+  history_required: 200
