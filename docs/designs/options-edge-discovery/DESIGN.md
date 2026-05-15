@@ -186,7 +186,13 @@ The full list is committed to `stage_0_model_universe.md` with model name, git h
 - **Period A (Discovery)** — first 12 months. Used for diagnostic pipeline validation AND for candidate selection within each labeler family.
 - **Period B (Confirmation)** — second 12 months. **Sealed.** No Stage 0 metric is computed on Period B until Step 5. The confirmation script reads Period B from a path that does not exist until Step 5 is unlocked by signed commit of `stage_0_candidates.md`.
 
-**Step 4 — Discovery on Period A.** Run all metrics (§4.2.1–4.2.4) on Period A for every model in the universe. Report. Within each labeler family (ZigZag, Triple Barrier, Forward Return), select **at most one candidate** by the pre-registered rule: highest Period A IC; ties broken by decile spread; further ties broken by gross hold-to-horizon Sharpe. At most 3 candidates total proceed to confirmation. Candidates are committed to `stage_0_candidates.md`. **Selection criteria are pre-registered; the rule is not changed after viewing results.**
+**Step 4 — Discovery on Period A.** Run all metrics (§4.2.1–4.2.4) on Period A for every model in the universe. Report.
+
+**Stability prerequisite (selection filter).** Split Period A into three contiguous 4-month sub-periods. A model is **eligible for candidacy** only if it satisfies the stability check on Period A: IC ≥ 0.02 in ≥ 2 of 3 four-month sub-periods, with consistent sign. This filters models whose Period A IC is driven by a single regime.
+
+Within each labeler family (ZigZag, Triple Barrier, Forward Return), select **at most one candidate** from the eligible set by the pre-registered rule: highest Period A IC; ties broken by decile spread; further ties broken by gross portfolio Sharpe. At most 3 candidates total proceed to confirmation. Candidates are committed to `stage_0_candidates.md`. **Selection criteria are pre-registered; the rule is not changed after viewing results.**
+
+The stability check lives on Period A because Period B is 12 months (no 3 annual sub-periods exist). Period B is single-shot statistical evidence for one candidate; stability is a Period A property used to weed unstable models out of the candidate pool *before* Period B is touched.
 
 **Step 5 — Confirmation on Period B.** Evaluate the (up-to-3) candidates against gates G0a/G0b/G0c (§4.5) on Period B. Apply **Holm-Bonferroni correction** to the IC t-statistic gate over the number of candidates: with 3 candidates, the IC t-stat thresholds become ≈2.39 / 2.13 / 2.00 in rank order of p-value. The decile-spread and gross-Sharpe gates are effect-size gates and use unadjusted thresholds.
 
@@ -215,7 +221,7 @@ Spearman rank correlation between model output and the **label's own realized ou
 
 For all three families, report: IC, IC t-statistic (with the HAC/clustering specified above), IC by year, IC by realized-volatility regime (rolling 30-bar return-std bucketed into terciles on Period A and frozen for Period B).
 
-**Gate G0a:** Model passes if **OOS IC ≥ 0.03 AND IC t-statistic ≥ Holm-Bonferroni threshold (2.39/2.13/2.00 for 3 candidates) AND IC ≥ 0.02 in at least 2 of 3 annual sub-periods of Period B**.
+**Gate G0a:** Candidate passes if **Period B IC ≥ 0.03 AND IC t-statistic ≥ Holm-Bonferroni threshold (2.39 / 2.13 / 2.00 by p-value rank for 3 candidates)**. Period B is 12 months and is evaluated as a single window; stability is enforced at the Period A selection stage (§4.1 Step 4).
 
 #### 4.2.2 Decile analysis
 
@@ -294,7 +300,7 @@ Code committed to `ktrdr/diagnostics/` (new module):
 ### 4.5 Stage 0 gate (the big one)
 
 Track A proceeds to Stage 1 only if **at least one Step-5 candidate** clears **all three confirmation gates on Period B simultaneously**:
-- **G0a (IC):** OOS IC ≥ 0.03 AND IC t-stat ≥ Holm-Bonferroni threshold AND ≥ 2 of 3 annual sub-periods at IC ≥ 0.02.
+- **G0a (IC):** Period B IC ≥ 0.03 AND IC t-stat ≥ Holm-Bonferroni threshold. (Period A stability filter — IC ≥ 0.02 in ≥ 2 of 3 four-month sub-periods — is applied earlier at candidate selection per §4.1 Step 4.)
 - **G0b (Decile):** top-minus-bottom mean realized return > 0.5% on Period B, top-3 deciles > bottom-3 deciles in mean realized return.
 - **G0c (Hold-to-horizon, portfolio-accounted):** gross portfolio Sharpe > 0.3 AND gross per-trade mean P&L > 0.
 
@@ -369,7 +375,7 @@ Build the minimum viable options backtest to validate that the new output shape 
 - **Entry rule:** open when the model's q75 > +threshold (bullish expected) or q25 < −threshold (bearish expected). Threshold chosen pre-registered from Stage 0 decile results — not swept.
 - **Strike selection:** short strike at the model's predicted q50 (50th percentile) of the forward return distribution, mapped to the underlying price. Long strike one width OTM. Width is pre-registered (suggest 1 strike or 1% of underlying, whichever is smaller).
 - **Holding:** to expiry or to 50% of max profit, whichever first. DTE matches the model's label horizon (e.g., 20-bar horizon on 1d = 20 DTE).
-- **P&L:** Real option-chain data for the chosen underlying (same data feed as Track B Stage B0). If chain data is not yet available at Stage 1 start, B-S reconstruction with 15% flat cost haircut is acceptable *for this minimal overlay only* (debit spreads are less skew-sensitive than iron condors and the gate compares two strategies under the same pricing model), with the limitation flagged in the Stage 1 report. No tuning.
+- **P&L:** Real option-chain data for the chosen underlying (same data feed as Track B Stage B0). **G1 evaluation requires real chains.** B-S reconstruction may be used during Stage 1 development for prototyping and smoke testing the overlay engine, but it cannot be used to evaluate G1. Rationale: the underlying-only baseline is not priced from the option surface, so B-S pricing errors do not cancel across the comparison (a debit spread's edge over underlying depends on surface, vol level, spread width, and strike-specific IV — exactly what B-S-from-VIX cannot reconstruct).
 - **Baseline:** underlying-only long-flat strategy on same bars (same entry signal, flat if no signal, long underlying if bullish signal, flat if bearish — do not short). This is the "no options overlay" comparison.
 
 **Stage 1 gate:** Options overlay shows **per-trade P&L lift over the underlying-long-flat baseline** on OOS data, with pre-registered parameters and no sweeps. Specifically: `(options strategy per-trade P&L) − (baseline per-trade P&L) > 0` with bootstrap 90% CI excluding zero.
@@ -513,7 +519,7 @@ If Bdiag fails, the volatility risk premium has compressed below tradable levels
 1. Compute IV percentile from VIX rolling 252-day window.
 2. If > 60 and the concurrent-position cap allows, select strikes from the real option chain (OptionsDX or higher tier), enter position.
 3. Track position mark-to-market daily on real chain marks; apply exit rules.
-4. Record fills with $0.50 per-contract commission and 5bps quote spread (SPX options assumption — to be revised against real spread data if available).
+4. **Record fills using the actual bid/ask from chain data, per leg.** For each leg: entry sells/buys at `mid − half_spread × direction` (i.e., cross half the quoted bid/ask to the unfavorable side). Exit applies the same half-spread crossing in reverse. Commission: $0.65 per contract per leg, both sides (current IBKR retail SPX/SPY rate). An iron condor takes 8 half-spreads round-trip (4 legs × 2 sides) plus 8 commission charges. Use the **same-bar bid/ask snapshot as the decision bar** for entry; for daily exits at 21 DTE or 50% profit, use that day's mark with the same half-spread model. **No flat "Xbps" assumption** — the half-spread is read from the chain.
 
 **Stress windows.** Strategy metrics are reported across:
 - **Full period 2016–2024.**
@@ -580,7 +586,7 @@ None by design in Stages B0 and B1. Both tracks may succeed independently. If Tr
 
 | Gate | Stage | Criterion | If fail |
 |---|---|---|---|
-| G0a | Stage 0 (Period B) | At least one candidate: OOS IC ≥ 0.03 AND IC t-stat ≥ Holm-Bonferroni threshold AND ≥2 of 3 annual sub-periods at IC ≥ 0.02 | Track A killed or paused (see §4.5) |
+| G0a | Stage 0 (Period B) | At least one candidate: Period B IC ≥ 0.03 AND IC t-stat ≥ Holm-Bonferroni threshold (stability checked at Period A selection, §4.1 Step 4) | Track A killed or paused (see §4.5) |
 | G0b | Stage 0 (Period B) | Same candidate: decile spread > 0.5% AND top-3 > bottom-3 deciles | Same as G0a |
 | G0c | Stage 0 (Period B) | Same candidate: gross **portfolio** Sharpe > 0.3 AND gross per-trade mean P&L > 0 | Same as G0a |
 | G1 | Stage 1 | Options overlay per-trade P&L lift over underlying-only baseline, pre-registered, OOS | Park Track A; signal exists but options are not the right wrapper |
@@ -632,7 +638,7 @@ PR #404 is superseded by this document and should be closed. Reasons:
 
 Material PR #404 may salvage:
 - The Kronos vol-regime classifier concept (usable in Stage 2 or Track B as a richer IV-context signal, if it clears AUC > baseline IV-percentile heuristic — which is a separate diagnostic not scoped here)
-- The Black-Scholes engine specification (usable as a plumbing/smoke-test fallback only; production evaluation now requires real chain data — see §7.3.1)
+- The Black-Scholes engine specification (usable as a plumbing/smoke-test/prototyping fallback only; gate evaluation — G1 and GB0 — requires real chain data per §5.3 and §7.3.1)
 - The IBKR MCP investigation ([DECISION NEEDED] in PR #404 Task 5.1 — this work is still needed before Stage B1)
 - The per-component architecture specs (useful as a reference if Stage 2 proceeds, not as a commitment)
 
@@ -659,7 +665,8 @@ Committed to `docs/designs/options-edge-discovery/stage_0_params.md` before Step
 - Period B (Confirmation, sealed): second 12 months post-training
 
 **Gate thresholds:**
-- G0a IC: OOS IC ≥ 0.03; IC t-stat ≥ Holm-Bonferroni threshold (2.39 / 2.13 / 2.00 by p-value rank with 3 candidates); ≥ 2 of 3 annual sub-periods at IC ≥ 0.02
+- G0a IC: Period B IC ≥ 0.03; IC t-stat ≥ Holm-Bonferroni threshold (2.39 / 2.13 / 2.00 by p-value rank with 3 candidates)
+- Period A stability filter (selection prerequisite): IC ≥ 0.02 in ≥ 2 of 3 four-month sub-periods of Period A, consistent sign
 - G0b decile: top-minus-bottom mean realized return > 0.5%; top-3 > bottom-3 deciles
 - G0c hold-to-horizon: gross **portfolio** Sharpe > 0.3 AND gross per-trade mean P&L > 0
 
@@ -695,7 +702,8 @@ Committed to `docs/designs/options-edge-discovery/stage_b0_params.md` before Sta
 - Max concurrent positions: 2
 - Position size: 2% of account at risk
 - Hard stop: 200% of credit received
-- Cost model: $0.50/contract commission + 5bps quote spread (real-chain marks)
+- Cost model (real chain): per-leg half-spread crossed from quoted bid/ask both sides; $0.65/contract commission per leg per side. Iron condor round-trip = 8 half-spreads + 8 commissions. No flat-bps assumption — half-spreads read from the chain at decision-bar snapshot.
+- Cost model (B-S smoke-test fallback, not used for GB0 evaluation): 0.10 vol-point haircut applied to each leg's implied vol before pricing (rough proxy that overstates costs vs typical SPX quotes), plus the same $0.65/contract/leg/side commission.
 - Backtest period: 2016-01-01 through 2024-12-31
 
 **Stress windows (reported separately):**
@@ -745,4 +753,5 @@ Committed to `docs/designs/options-edge-discovery/stage_b0_params.md` before Sta
 | Date | Version | Author | Summary |
 |---|---|---|---|
 | 2026-04-19 | Draft v1 | Claude + Karl | Initial replacement for PR #404. Three-stage Track A + independent Track B. Stage 0 implementation-ready; Stages 1/2 sketched; Track B implementation-ready. |
+| 2026-05-15 | Draft v2.1 | Claude + Karl | Round-2 review residuals. (a) Period B inconsistency fixed: stability check moved to Period A (≥2 of 3 four-month sub-periods at IC ≥ 0.02) as a selection prerequisite; Period B G0a is single-window IC + Holm-adjusted t-stat. (b) Stage 1 B-S fallback rejected as a gate: G1 requires real chains; B-S is prototyping/smoke only. Rationale: underlying-only baseline is not priced from the surface, so pricing errors do not cancel. (c) Options spread cost specified precisely: real chain → per-leg half-spread crossed from quoted bid/ask both sides; $0.65/contract/leg/side commission; iron condor round-trip = 8 half-spreads + 8 commissions. No flat-bps assumption. |
 | 2026-05-15 | Draft v2 | Claude + Karl | Addresses hostile methodology review on PR #405. (1) Stage 0 rewritten with pre-registered model universe and sealed Period B confirmation set; Holm-Bonferroni applied; fallback-retraining clause removed. (2) IC diagnostic split per labeler family with event-end alignment, clustered/HAC SE, López de Prado purging+embargo for Triple Barrier. (3) HAC lag now matches horizon per family (Forward Return) or mean event duration (event labels). (4) Hold-to-horizon engine adds explicit portfolio cap and capital accounting; gates on portfolio Sharpe, not per-trade Sharpe. (5) Stage 1 quantile head expanded to 9 quantiles with by-construction monotonicity, GPD tail extrapolation, moneyness-stratified calibration. (6) Stage B0 $0 B-S/VIX path demoted to plumbing smoke test; GB0 evaluation requires real chain data. (7) Stage B0 adds Bdiag VRP test before strategy backtest; adds stress windows (2018Q4 / 2020Feb-Apr / 2022) and ±20% parameter sensitivity sweep. (8) Stage B1 rewritten as operational sign-off, not statistical evidence. |
