@@ -17,9 +17,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - uses: astral-sh/setup-uv@v3
+      - uses: astral-sh/setup-uv@caf0cab7a618c569241d31dcd442f54681755d39 # v3
         with:
           enable-cache: true
           cache-dependency-glob: "uv.lock"
@@ -46,7 +46,7 @@ jobs:
 
       - name: Upload validation report
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: mcp-validation-report
           path: validation-report.txt
